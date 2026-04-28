@@ -1,0 +1,262 @@
+import { Router, type IRouter } from "express";
+import { db, ordersTable, customersTable, productsTable, digitalCodesTable } from "@workspace/db";
+import { eq, and } from "drizzle-orm";
+import {
+  CreateOrderBody,
+  UpdateOrderBody,
+  GetOrderParams,
+  UpdateOrderParams,
+  ListOrdersQueryParams,
+  CreateOrderPaymentParams,
+  VerifyPaymentBody,
+} from "@workspace/api-zod";
+import { sendWhatsappMessage } from "../lib/whatsapp";
+
+const router: IRouter = Router();
+
+function formatOrder(o: typeof ordersTable.$inferSelect) {
+  return {
+    ...o,
+    totalAmount: parseFloat(o.totalAmount as unknown as string),
+    items: (o.items as unknown[]) || [],
+    createdAt: o.createdAt.toISOString(),
+    updatedAt: o.updatedAt.toISOString(),
+  };
+}
+
+router.get("/orders", async (req, res): Promise<void> => {
+  const params = ListOrdersQueryParams.safeParse(req.query);
+  const conditions = [];
+
+  if (params.success) {
+    if (params.data.status) {
+      conditions.push(eq(ordersTable.status, params.data.status));
+    }
+    if (params.data.customerId) {
+      conditions.push(eq(ordersTable.customerId, params.data.customerId));
+    }
+  }
+
+  let orders;
+  if (conditions.length > 0) {
+    orders = await db.select().from(ordersTable).where(and(...conditions));
+  } else {
+    orders = await db.select().from(ordersTable);
+  }
+
+  res.json(orders.map(formatOrder));
+});
+
+router.post("/orders", async (req, res): Promise<void> => {
+  const parsed = CreateOrderBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+
+  let totalAmount = 0;
+  const orderItems = [];
+
+  for (const item of parsed.data.items) {
+    const [product] = await db.select().from(productsTable).where(eq(productsTable.id, item.productId));
+    if (!product) {
+      res.status(400).json({ error: `المنتج ${item.productId} غير موجود` });
+      return;
+    }
+    const unitPrice = parseFloat(product.price as unknown as string);
+    const totalPrice = unitPrice * item.quantity;
+    totalAmount += totalPrice;
+    orderItems.push({
+      id: product.id,
+      productId: product.id,
+      productName: product.name,
+      quantity: item.quantity,
+      unitPrice,
+      totalPrice,
+    });
+  }
+
+  let customerId: number | null = null;
+  const existingCustomers = await db.select().from(customersTable).where(eq(customersTable.phone, parsed.data.customerPhone));
+  if (existingCustomers.length > 0) {
+    customerId = existingCustomers[0].id;
+    await db.update(customersTable).set({
+      totalOrders: existingCustomers[0].totalOrders + 1,
+      totalSpent: String(parseFloat(existingCustomers[0].totalSpent as unknown as string) + totalAmount),
+    }).where(eq(customersTable.id, customerId));
+  } else {
+    const [customer] = await db.insert(customersTable).values({
+      name: parsed.data.customerName,
+      phone: parsed.data.customerPhone,
+      totalOrders: 1,
+      totalSpent: String(totalAmount),
+    }).returning();
+    customerId = customer.id;
+  }
+
+  const [order] = await db.insert(ordersTable).values({
+    customerId,
+    customerName: parsed.data.customerName,
+    customerPhone: parsed.data.customerPhone,
+    items: orderItems as unknown as null,
+    totalAmount: String(totalAmount),
+    status: "pending",
+    paymentStatus: "unpaid",
+    notes: parsed.data.notes || null,
+    source: parsed.data.source || "web",
+  }).returning();
+
+  res.status(201).json(formatOrder(order));
+});
+
+router.get("/orders/:id", async (req, res): Promise<void> => {
+  const params = GetOrderParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+  const [order] = await db.select().from(ordersTable).where(eq(ordersTable.id, params.data.id));
+  if (!order) {
+    res.status(404).json({ error: "الطلب غير موجود" });
+    return;
+  }
+  res.json(formatOrder(order));
+});
+
+router.patch("/orders/:id", async (req, res): Promise<void> => {
+  const params = UpdateOrderParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+  const parsed = UpdateOrderBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+
+  const [order] = await db.select().from(ordersTable).where(eq(ordersTable.id, params.data.id));
+  if (!order) {
+    res.status(404).json({ error: "الطلب غير موجود" });
+    return;
+  }
+
+  const [updated] = await db.update(ordersTable).set(parsed.data).where(eq(ordersTable.id, params.data.id)).returning();
+
+  if (parsed.data.paymentStatus === "paid" && order.paymentStatus !== "paid") {
+    const items = (order.items as unknown as Array<{ productId: number; productName: string; quantity: number }>) || [];
+    for (const item of items) {
+      const [product] = await db.select().from(productsTable).where(eq(productsTable.id, item.productId));
+      if (product?.type === "digital") {
+        const [code] = await db.select().from(digitalCodesTable).where(
+          and(eq(digitalCodesTable.productId, item.productId), eq(digitalCodesTable.used, false))
+        );
+        if (code) {
+          await db.update(digitalCodesTable).set({ used: true, usedAt: new Date() }).where(eq(digitalCodesTable.id, code.id));
+          try {
+            await sendWhatsappMessage(order.customerPhone, `شكراً لطلبك! كود المنتج الخاص بك هو: ${code.code}`);
+          } catch {
+            req.log.warn("Could not send WhatsApp message for digital code");
+          }
+        }
+      }
+    }
+    try {
+      await sendWhatsappMessage(order.customerPhone, `تم تأكيد طلبك رقم #${order.id} بنجاح! شكراً لثقتك بنا.`);
+    } catch {
+      req.log.warn("Could not send WhatsApp confirmation");
+    }
+  }
+
+  res.json(formatOrder(updated));
+});
+
+router.post("/orders/:id/payment", async (req, res): Promise<void> => {
+  const params = CreateOrderPaymentParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+  const [order] = await db.select().from(ordersTable).where(eq(ordersTable.id, params.data.id));
+  if (!order) {
+    res.status(404).json({ error: "الطلب غير موجود" });
+    return;
+  }
+
+  const [settings] = await db.select().from(
+    (await import("@workspace/db")).storeSettingsTable
+  );
+
+  const amount = parseFloat(order.totalAmount as unknown as string);
+  const paymentId = `order_${order.id}_${Date.now()}`;
+  let paymentUrl = `#payment-${paymentId}`;
+
+  if (settings?.paylinkApiKey && settings?.paylinkSecretKey) {
+    try {
+      const paylinkRes = await fetch("https://restapi.paylink.sa/api/addInvoice", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apiId: settings.paylinkApiKey,
+          apiPassword: settings.paylinkSecretKey,
+        },
+        body: JSON.stringify({
+          amount,
+          callBackUrl: `${process.env["REPLIT_DEV_DOMAIN"] || "http://localhost"}/api/payments/callback`,
+          clientEmail: "customer@example.com",
+          clientMobile: order.customerPhone,
+          clientName: order.customerName,
+          currency: "SAR",
+          note: `طلب رقم ${order.id}`,
+          orderNumber: String(order.id),
+          products: [{ title: "طلب من المتجر", price: amount, qty: 1 }],
+        }),
+      });
+      if (paylinkRes.ok) {
+        const data = await paylinkRes.json() as { paymentUrl?: string; transactionNo?: string };
+        if (data.paymentUrl) {
+          paymentUrl = data.paymentUrl;
+        }
+      }
+    } catch (e) {
+      req.log.warn({ err: e }, "Paylink API error, using mock payment link");
+    }
+  }
+
+  await db.update(ordersTable).set({
+    paymentId,
+    paymentLink: paymentUrl,
+    paymentStatus: "pending",
+    status: "payment_pending",
+  }).where(eq(ordersTable.id, order.id));
+
+  try {
+    await sendWhatsappMessage(order.customerPhone, `رابط الدفع لطلبك رقم #${order.id}: ${paymentUrl}`);
+  } catch {
+    req.log.warn("Could not send payment link via WhatsApp");
+  }
+
+  res.json({ paymentId, paymentUrl, amount, orderId: order.id });
+});
+
+router.post("/orders/payment/verify", async (req, res): Promise<void> => {
+  const parsed = VerifyPaymentBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+
+  const [order] = await db.select().from(ordersTable).where(eq(ordersTable.id, parsed.data.orderId));
+  if (!order) {
+    res.status(404).json({ error: "الطلب غير موجود" });
+    return;
+  }
+
+  res.json({
+    paid: order.paymentStatus === "paid",
+    status: order.paymentStatus,
+    orderId: order.id,
+  });
+});
+
+export default router;
