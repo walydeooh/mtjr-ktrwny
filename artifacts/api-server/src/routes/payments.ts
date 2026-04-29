@@ -76,25 +76,40 @@ router.get("/payments/callback", async (req, res): Promise<void> => {
   let paid = false;
   const [settings] = await db.select().from(storeSettingsTable);
 
-  // Prefer the transactionNo passed by Paylink in the callback, but fall back
-  // to the one we stored at order creation in case Paylink doesn't echo it.
-  const verifyTxNo = transactionNo || order.paylinkTransactionNo || "";
+  // Bind invoice ↔ order via transactionNo. We stored Paylink's transactionNo
+  // when creating the invoice; if a callback arrives with a different one,
+  // someone is trying to attach a stranger's paid invoice to this order.
+  const storedTxNo = order.paylinkTransactionNo || "";
+  const verifyTxNo = transactionNo || storedTxNo;
 
-  if (verifyTxNo && settings?.paylinkApiKey && settings?.paylinkSecretKey) {
+  if (transactionNo && storedTxNo && transactionNo !== storedTxNo) {
+    req.log.warn(
+      { orderId, callbackTxNo: transactionNo, storedTxNo },
+      "Paylink callback transactionNo doesn't match order — rejecting",
+    );
+  } else if (verifyTxNo && settings?.paylinkApiKey && settings?.paylinkSecretKey) {
     const data = await getPaylinkInvoice(
       { apiKey: settings.paylinkApiKey, secretKey: settings.paylinkSecretKey },
       verifyTxNo,
     );
     if (data) {
       const statusOk = data.orderStatus.toLowerCase() === "paid";
-      const orderNumberOk = data.orderNumber === String(orderId);
+      // Amount check defends against partial-payment fraud and tampered URLs.
+      // We don't check orderNumber because Paylink's getInvoice often returns
+      // an empty orderNumber even when we sent one in addInvoice — the
+      // transactionNo binding above is the actual order↔invoice link.
       const expectedAmount = parseFloat(order.totalAmount as unknown as string);
       const amountOk = Math.abs(data.amount - expectedAmount) < 0.01;
-      paid = statusOk && orderNumberOk && amountOk;
-      if (statusOk && !paid) {
+      paid = statusOk && amountOk;
+      if (statusOk && !amountOk) {
         req.log.warn(
-          { orderId, transactionNo: verifyTxNo, returnedOrderNumber: data.orderNumber, returnedAmount: data.amount, expectedAmount },
-          "Paylink invoice paid but order/amount mismatch",
+          { orderId, transactionNo: verifyTxNo, returnedAmount: data.amount, expectedAmount },
+          "Paylink invoice paid but amount mismatch",
+        );
+      } else if (!statusOk) {
+        req.log.info(
+          { orderId, transactionNo: verifyTxNo, orderStatus: data.orderStatus },
+          "Paylink invoice not paid yet",
         );
       }
     }
