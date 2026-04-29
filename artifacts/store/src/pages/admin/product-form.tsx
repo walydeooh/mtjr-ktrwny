@@ -114,12 +114,23 @@ export default function ProductForm() {
     if (!importUrl.trim()) return;
     setImporting(true);
     try {
+      const token = localStorage.getItem("token");
       const r = await fetch("/api/products/import-from-url", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({ url: importUrl }),
       });
-      if (!r.ok) throw new Error("فشل الاستيراد");
+      if (!r.ok) {
+        let serverMsg = "فشل الاستيراد";
+        try {
+          const errBody = await r.json();
+          if (errBody?.error) serverMsg = errBody.error;
+        } catch {}
+        throw new Error(serverMsg);
+      }
       const data = await r.json();
       if (data.name) form.setValue("name", data.name);
       if (data.description) form.setValue("description", data.description);
