@@ -70,7 +70,8 @@ function Router() {
   return (
     <Switch>
       <Route path="/login" component={Login} />
-      <Route path="/admin*" component={AdminRoutes} />
+      <Route path="/admin" component={AdminRoutes} />
+      <Route path="/admin/:rest*" component={AdminRoutes} />
       <Route path="/*" component={StoreRoutes} />
     </Switch>
   );

@@ -100,6 +100,11 @@ async function buildAll() {
       "puppeteer",
       "puppeteer-core",
       "electron",
+      "@whiskeysockets/baileys",
+      "whatsapp-web.js",
+      "@hapi/boom",
+      "noise-handshake",
+      "libsignal",
     ],
     sourcemap: "linked",
     plugins: [
