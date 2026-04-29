@@ -21,6 +21,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { MediaPicker } from "@/components/ui/media-picker";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Form,
@@ -625,16 +626,11 @@ export default function ProductForm() {
                         name="imageUrl"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>رابط الصورة</FormLabel>
+                            <FormLabel>صورة المنتج</FormLabel>
                             <FormControl>
-                              <Input placeholder="https://..." dir="ltr" className="text-right" {...field} />
+                              <MediaPicker value={field.value || ""} onChange={field.onChange} />
                             </FormControl>
                             <FormMessage />
-                            {field.value && (
-                              <div className="mt-4 aspect-square rounded-md overflow-hidden border">
-                                <img src={field.value} alt="Preview" className="w-full h-full object-cover" />
-                              </div>
-                            )}
                           </FormItem>
                         )}
                       />
@@ -705,12 +701,22 @@ export default function ProductForm() {
                         <FormField
                           control={form.control}
                           name="usageInstructionsMediaUrl"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>رابط الوسائط</FormLabel>
-                              <FormControl><Input {...field} value={field.value || ""} dir="ltr" className="text-right" /></FormControl>
-                            </FormItem>
-                          )}
+                          render={({ field }) => {
+                            const mediaType = form.watch("usageInstructionsMediaType");
+                            return (
+                              <FormItem>
+                                <FormLabel>الوسائط</FormLabel>
+                                <FormControl>
+                                  <MediaPicker
+                                    value={field.value || ""}
+                                    onChange={field.onChange}
+                                    accept={mediaType === "video" ? "video/*" : "image/*"}
+                                    previewKind={mediaType === "video" ? "video" : "image"}
+                                  />
+                                </FormControl>
+                              </FormItem>
+                            );
+                          }}
                         />
                       </div>
                       <FormField

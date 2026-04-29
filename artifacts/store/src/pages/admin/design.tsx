@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { MediaPicker } from "@/components/ui/media-picker";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
@@ -102,7 +103,7 @@ export default function Design() {
         <h2 className="text-xl font-semibold">البانر الترويجي (الصفحة الرئيسية)</h2>
         <div>
           <Label>صورة البانر (URL)</Label>
-          <Input value={settings.bannerImageUrl || ""} onChange={(e) => set("bannerImageUrl", e.target.value || null)} placeholder="https://..." />
+          <MediaPicker value={settings.bannerImageUrl || ""} onChange={(v) => set("bannerImageUrl", v || null)} />
         </div>
         <div className="grid grid-cols-2 gap-4">
           <div>

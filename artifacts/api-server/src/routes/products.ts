@@ -163,7 +163,8 @@ router.post("/products/:id/codes", requireAuth, async (req, res): Promise<void> 
 // (both within the request AND against existing codes for the same product),
 // then inserts in a single round-trip. Returns counts so the UI can report.
 router.post("/products/:id/codes/bulk", requireAuth, async (req, res): Promise<void> => {
-  const productId = parseInt(req.params.id || "", 10);
+  const idRaw = req.params.id;
+  const productId = parseInt(typeof idRaw === "string" ? idRaw : "", 10);
   if (!productId || isNaN(productId)) {
     res.status(400).json({ error: "معرّف منتج غير صالح" });
     return;

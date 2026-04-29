@@ -3,7 +3,10 @@ import { z } from "zod";
 import { and, desc, eq, ilike, or, sql } from "drizzle-orm";
 import { db, productsTable, digitalCodesTable, ordersTable } from "@workspace/db";
 import { anthropic } from "@workspace/integrations-anthropic-ai";
-import type { MessageParam, Tool, ToolUseBlock } from "@anthropic-ai/sdk/resources/messages";
+import type Anthropic from "@anthropic-ai/sdk";
+type MessageParam = Anthropic.MessageParam;
+type Tool = Anthropic.Tool;
+type ToolUseBlock = Anthropic.ToolUseBlock;
 import { requireAuth } from "../middlewares/auth";
 
 const router: IRouter = Router();

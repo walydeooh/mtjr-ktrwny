@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { MediaPicker } from "@/components/ui/media-picker";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -110,7 +111,7 @@ export default function BankAccounts() {
                 <div><Label>ترتيب العرض</Label><Input type="number" value={form.sortOrder} onChange={(e) => setForm({ ...form, sortOrder: e.target.value })} /></div>
               </div>
               <div><Label>الآيبان (IBAN) *</Label><Input value={form.iban} onChange={(e) => setForm({ ...form, iban: e.target.value })} placeholder="SA0000000000000000000000" dir="ltr" className="text-right font-mono" /></div>
-              <div><Label>رابط شعار البنك (اختياري)</Label><Input value={form.logoUrl} onChange={(e) => setForm({ ...form, logoUrl: e.target.value })} placeholder="https://..." dir="ltr" className="text-right" /></div>
+              <div><Label>شعار البنك (اختياري)</Label><MediaPicker value={form.logoUrl} onChange={(v) => setForm({ ...form, logoUrl: v })} /></div>
               <div className="flex items-center justify-between"><Label>نشط</Label><Switch checked={form.active} onCheckedChange={(v) => setForm({ ...form, active: v })} /></div>
             </div>
             <DialogFooter><Button onClick={save}>{editing ? "حفظ" : "إضافة"}</Button></DialogFooter>

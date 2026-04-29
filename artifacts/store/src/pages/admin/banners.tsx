@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { MediaPicker } from "@/components/ui/media-picker";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -144,7 +145,7 @@ export default function Banners() {
           <DialogContent dir="rtl" className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader><DialogTitle>{editing ? "تعديل بانر" : "بانر جديد"}</DialogTitle></DialogHeader>
             <div className="space-y-4">
-              <div><Label>رابط الصورة *</Label><Input value={form.imageUrl} onChange={(e) => setForm({ ...form, imageUrl: e.target.value })} placeholder="https://..." dir="ltr" className="text-right" /></div>
+              <div><Label>صورة البانر *</Label><MediaPicker value={form.imageUrl} onChange={(v) => setForm({ ...form, imageUrl: v })} /></div>
               <div className="grid grid-cols-2 gap-3">
                 <div><Label>العنوان</Label><Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} /></div>
                 <div><Label>العنوان الفرعي</Label><Input value={form.subtitle} onChange={(e) => setForm({ ...form, subtitle: e.target.value })} /></div>
