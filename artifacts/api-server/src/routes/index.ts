@@ -11,6 +11,10 @@ import statsRouter from "./stats";
 import customerAuthRouter from "./customer-auth";
 import myOrdersRouter from "./my-orders";
 import paymentsRouter from "./payments";
+import couponsRouter from "./coupons";
+import affiliatesRouter from "./affiliates";
+import campaignsRouter from "./campaigns";
+import employeesRouter from "./employees";
 
 const router: IRouter = Router();
 
@@ -26,5 +30,9 @@ router.use(statsRouter);
 router.use(customerAuthRouter);
 router.use(myOrdersRouter);
 router.use(paymentsRouter);
+router.use(couponsRouter);
+router.use(affiliatesRouter);
+router.use(campaignsRouter);
+router.use(employeesRouter);
 
 export default router;

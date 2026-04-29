@@ -6,11 +6,22 @@ import { Badge } from "@/components/ui/badge";
 import { ShoppingCart, Package } from "lucide-react";
 import { useCart } from "@/hooks/use-cart";
 import { useToast } from "@/hooks/use-toast";
+import { useEffect, useState } from "react";
+
+type Banner = {
+  bannerImageUrl: string | null;
+  bannerTitle: string | null;
+  bannerSubtitle: string | null;
+  bannerCtaText: string | null;
+  bannerCtaUrl: string | null;
+};
 
 export default function Home() {
   const [location] = useLocation();
   const searchParams = new URLSearchParams(location.split('?')[1] || '');
   const q = searchParams.get('q') || '';
+  const [banner, setBanner] = useState<Banner | null>(null);
+  useEffect(() => { fetch("/api/settings").then((r) => r.json()).then(setBanner).catch(() => {}); }, []);
 
   const { data: products, isLoading } = useListProducts(
     { active: "true" },
@@ -68,16 +79,38 @@ export default function Home() {
       )}
       
       {!q && (
-        <section className="bg-primary/5 rounded-2xl p-8 md:p-12 text-center mb-12 border border-primary/10 relative overflow-hidden">
-          <div className="relative z-10">
-            <h1 className="text-3xl md:text-5xl font-extrabold text-foreground mb-4">
-              اكتشف أحدث المنتجات
-            </h1>
-            <p className="text-muted-foreground text-lg max-w-2xl mx-auto mb-8">
-              تسوق الآن من مجموعتنا المختارة بعناية من المنتجات الرقمية والمادية وأكثر من ذلك.
-            </p>
-          </div>
-        </section>
+        banner?.bannerImageUrl ? (
+          <section
+            className="rounded-2xl overflow-hidden mb-12 border relative"
+            style={{ backgroundImage: `url(${banner.bannerImageUrl})`, backgroundSize: "cover", backgroundPosition: "center", minHeight: 320 }}
+          >
+            <div className="bg-gradient-to-l from-black/70 to-black/30 p-8 md:p-14 text-white" style={{ minHeight: 320 }}>
+              <div className="max-w-2xl">
+                <h1 className="text-3xl md:text-5xl font-extrabold mb-4">{banner.bannerTitle || "اكتشف أحدث المنتجات"}</h1>
+                {banner.bannerSubtitle && <p className="text-lg md:text-xl opacity-90 mb-6">{banner.bannerSubtitle}</p>}
+                {banner.bannerCtaText && (
+                  <Button asChild size="lg" className="text-base">
+                    <Link href={banner.bannerCtaUrl || "/"}>{banner.bannerCtaText}</Link>
+                  </Button>
+                )}
+              </div>
+            </div>
+          </section>
+        ) : (
+          <section className="bg-primary/5 rounded-2xl p-8 md:p-12 text-center mb-12 border border-primary/10 relative overflow-hidden">
+            <div className="relative z-10">
+              <h1 className="text-3xl md:text-5xl font-extrabold text-foreground mb-4">
+                {banner?.bannerTitle || "اكتشف أحدث المنتجات"}
+              </h1>
+              <p className="text-muted-foreground text-lg max-w-2xl mx-auto mb-8">
+                {banner?.bannerSubtitle || "تسوق الآن من مجموعتنا المختارة بعناية من المنتجات الرقمية والمادية وأكثر من ذلك."}
+              </p>
+              {banner?.bannerCtaText && banner?.bannerCtaUrl && (
+                <Button asChild size="lg"><Link href={banner.bannerCtaUrl}>{banner.bannerCtaText}</Link></Button>
+              )}
+            </div>
+          </section>
+        )
       )}
 
       {filteredProducts?.length === 0 ? (

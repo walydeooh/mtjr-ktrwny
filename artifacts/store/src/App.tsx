@@ -27,6 +27,12 @@ import Customers from "@/pages/admin/customers";
 import Bookings from "@/pages/admin/bookings";
 import Whatsapp from "@/pages/admin/whatsapp";
 import Settings from "@/pages/admin/settings";
+import AdminCoupons from "@/pages/admin/coupons";
+import AdminAffiliates from "@/pages/admin/affiliates";
+import AdminCampaigns from "@/pages/admin/campaigns";
+import AdminEmployees from "@/pages/admin/employees";
+import AdminDesign from "@/pages/admin/design";
+import BankTransfer from "@/pages/payment-bank-transfer";
 import { useLocation } from "wouter";
 import { ReactNode } from "react";
 
@@ -80,6 +86,11 @@ function Router() {
         <Route path="/admin/customers" component={Customers} />
         <Route path="/admin/bookings" component={Bookings} />
         <Route path="/admin/whatsapp" component={Whatsapp} />
+        <Route path="/admin/coupons" component={AdminCoupons} />
+        <Route path="/admin/affiliates" component={AdminAffiliates} />
+        <Route path="/admin/campaigns" component={AdminCampaigns} />
+        <Route path="/admin/employees" component={AdminEmployees} />
+        <Route path="/admin/design" component={AdminDesign} />
         <Route path="/admin/settings" component={Settings} />
 
         {/* Storefront routes */}
@@ -91,6 +102,7 @@ function Router() {
         <Route path="/my-orders" component={MyOrders} />
         <Route path="/payment/success" component={PaymentSuccess} />
         <Route path="/payment/failed" component={PaymentFailed} />
+        <Route path="/payment/bank-transfer" component={BankTransfer} />
 
         <Route component={NotFound} />
       </Switch>

@@ -91,6 +91,28 @@ async function handleIncomingMessage(msg: { from: string; body: string; id: stri
     }
   }
 
+  // AI fallback: if AI is enabled and no rule matched, use OpenAI to answer.
+  if (!reply && settings.aiEnabled && process.env["OPENAI_API_KEY"]) {
+    try {
+      const openai = new OpenAI({ apiKey: process.env["OPENAI_API_KEY"] });
+      const products = await db.select().from(productsTable).where(eq(productsTable.active, true));
+      const productsList = products.slice(0, 50).map(p => `- ${p.name}: ${p.price} ريال`).join("\n");
+      const sysPrompt = settings.aiSystemPrompt
+        || `أنت مساعد متجر "${settings.storeName}" الذكي. أجب باللغة العربية بشكل مختصر وودي. المنتجات المتاحة:\n${productsList}`;
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          { role: "system", content: sysPrompt },
+          { role: "user", content: msg.body },
+        ],
+        max_tokens: 400,
+      });
+      reply = completion.choices[0]?.message?.content || null;
+    } catch (e) {
+      logger.warn({ err: e }, "AI fallback failed");
+    }
+  }
+
   if (reply) {
     try {
       await sendWhatsappMessage(msg.from, reply);

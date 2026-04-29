@@ -101,3 +101,15 @@ The token getter in `main.tsx` switches based on `window.location.pathname`.
 - WhatsApp uses Baileys; QR is generated and shown in `/admin/whatsapp`. Sessions persist in `.wa-session/`.
 - OpenAI key (`OPENAI_API_KEY`) needs to be set for AI auto-replies.
 - Paylink keys are configured via the Settings page in admin.
+
+## Phase 2-5 Features (added)
+- **Coupons** (`/admin/coupons`): create/edit/delete percent or fixed-amount discounts with min order, max uses, expiry. Public `POST /api/coupons/validate` for storefront. `usedCount` is incremented atomically only on payment success (with `usedCount < maxUses` guard) — never on order creation — to prevent unpaid orders from depleting limits.
+- **Bank transfer**: storefront checkout shows a payment-method selector when `settings.bankTransferEnabled` is on. Order is created with `paymentMethod=bank_transfer`, customer is redirected to `/payment/bank-transfer` (IBAN copy + WhatsApp deep link). Admin confirms via `POST /api/payments/:orderId/confirm-bank` (requireAuth) which marks paid, delivers digital codes, and notifies customer.
+- **Affiliate program** (`/admin/affiliates`): each affiliate has an auto-generated code; storefront captures `?ref=CODE` into `localStorage["affiliate_code"]` and includes it on order create. On payment success, `affiliate_referrals` is inserted (unique on `order_id` for idempotency) and `totalEarned` bumped. Admin can record manual payouts.
+- **WhatsApp campaigns** (`/admin/campaigns`): bulk-message all customers; progress is tracked on the row and auto-polled.
+- **AI auto-replies**: `whatsapp.ts` falls back to `gpt-4o-mini` (using `settings.aiSystemPrompt`) when `aiEnabled && whatsappAutoReply`.
+- **Employees** (`/admin/employees`): bcrypt-hashed `admin_users` with `role` (owner/manager/staff). Last owner cannot be deleted.
+- **Design editor** (`/admin/design`): theme primary/secondary color (mapped to CSS HSL vars by `store-layout`), banner block on home, contact info + social links rendered in footer, bank-transfer config.
+- **Settings router**: `GET /api/settings` is public (storefront reads it). `PATCH /api/settings` requires admin auth and uses a `STRING_FIELD_MAP` to map API keys (e.g. `contactPhone`, `bankAccountIban`, `bankInstructions`) to actual schema columns (`contactWhatsapp`, `bankIban`, `bankAccountNumber`).
+- **Auth**: all admin CRUD endpoints (coupons, affiliates, campaigns, employees, settings PATCH, payments confirm-bank) protected with `requireAuth` middleware.
+- **Dev OTP**: `POST /api/customer-auth/request-otp` returns the OTP in the `devOtp` response field when `NODE_ENV !== "production"` to ease end-to-end testing.

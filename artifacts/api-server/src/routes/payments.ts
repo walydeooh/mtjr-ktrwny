@@ -1,7 +1,42 @@
 import { Router, type IRouter } from "express";
-import { db, ordersTable, storeSettingsTable, productsTable, digitalCodesTable } from "@workspace/db";
-import { eq, and } from "drizzle-orm";
+import { db, ordersTable, storeSettingsTable, productsTable, digitalCodesTable, affiliatesTable, affiliateReferralsTable, couponsTable } from "@workspace/db";
+import { eq, and, sql, isNull, or } from "drizzle-orm";
 import { sendWhatsappMessage } from "../lib/whatsapp";
+import { requireAuth } from "../middlewares/auth";
+
+async function creditAffiliate(orderId: number, code: string, totalAmount: number, log: { warn: (o: unknown, m?: string) => void }) {
+  try {
+    // Idempotency: skip if a referral already exists for this order.
+    const [existing] = await db.select().from(affiliateReferralsTable).where(eq(affiliateReferralsTable.orderId, orderId));
+    if (existing) return;
+    const [aff] = await db.select().from(affiliatesTable).where(eq(affiliatesTable.code, code));
+    if (!aff || !aff.active) return;
+    const pct = parseFloat(aff.commissionPercent as unknown as string);
+    const commission = Math.round((totalAmount * pct) / 100 * 100) / 100;
+    await db.insert(affiliateReferralsTable).values({
+      affiliateId: aff.id,
+      orderId,
+      commissionAmount: String(commission),
+      status: "pending",
+    });
+    await db.update(affiliatesTable).set({
+      totalEarned: sql`${affiliatesTable.totalEarned} + ${commission}`,
+    }).where(eq(affiliatesTable.id, aff.id));
+  } catch (e) {
+    log.warn({ err: e, orderId, code }, "Failed to credit affiliate");
+  }
+}
+
+async function consumeCoupon(code: string | null) {
+  if (!code) return;
+  // Atomic increment with max-use enforcement.
+  await db.update(couponsTable).set({
+    usedCount: sql`${couponsTable.usedCount} + 1`,
+  }).where(and(
+    eq(couponsTable.code, code),
+    or(isNull(couponsTable.maxUses), sql`${couponsTable.usedCount} < ${couponsTable.maxUses}`),
+  ));
+}
 
 const router: IRouter = Router();
 
@@ -94,6 +129,12 @@ router.get("/payments/callback", async (req, res): Promise<void> => {
       await sendWhatsappMessage(order.customerPhone, `✅ تم تأكيد الدفع لطلبك #${order.id} بمبلغ ${order.totalAmount} ر.س.\nشكراً لثقتك بنا!`);
     } catch {}
 
+    await consumeCoupon(order.couponCode);
+
+    if (order.affiliateCode) {
+      await creditAffiliate(order.id, order.affiliateCode, parseFloat(order.totalAmount as unknown as string), req.log);
+    }
+
     res.redirect(`${origin}/payment/success?orderId=${orderId}`);
     return;
   }
@@ -101,8 +142,70 @@ router.get("/payments/callback", async (req, res): Promise<void> => {
   res.redirect(`${origin}/payment/failed?orderId=${orderId}`);
 });
 
+// Submit a bank-transfer receipt for an order (customer-side or admin)
+router.post("/payments/:orderId/bank-transfer", async (req, res): Promise<void> => {
+  const orderId = parseInt(String(req.params["orderId"] ?? "0"), 10);
+  const receiptUrl = (req.body as { receiptUrl?: string })?.receiptUrl;
+  const [order] = await db.select().from(ordersTable).where(eq(ordersTable.id, orderId));
+  if (!order) { res.status(404).json({ error: "الطلب غير موجود" }); return; }
+  // Don't allow modification of an already-paid order or one that is already verified
+  if (order.paymentStatus === "paid") { res.status(409).json({ error: "الطلب مدفوع بالفعل" }); return; }
+  await db.update(ordersTable).set({
+    paymentMethod: "bank_transfer",
+    bankReceiptUrl: receiptUrl ?? null,
+    paymentStatus: "pending",
+    status: "payment_pending",
+  }).where(and(eq(ordersTable.id, orderId), sql`${ordersTable.paymentStatus} != 'paid'`));
+  try {
+    await sendWhatsappMessage(order.customerPhone, `📤 استلمنا إشعار التحويل البنكي لطلبك #${order.id}. سيتم تأكيده خلال 24 ساعة.`);
+  } catch {}
+  res.json({ ok: true });
+});
+
+// Admin: confirm bank transfer payment
+router.post("/payments/:orderId/confirm-bank", requireAuth, async (req, res): Promise<void> => {
+  const orderId = parseInt(String(req.params["orderId"] ?? "0"), 10);
+  const [order] = await db.select().from(ordersTable).where(eq(ordersTable.id, orderId));
+  if (!order) { res.status(404).json({ error: "الطلب غير موجود" }); return; }
+  if (order.paymentStatus === "paid") { res.json({ ok: true, alreadyPaid: true }); return; }
+
+  await db.update(ordersTable).set({
+    paymentStatus: "paid",
+    status: "processing",
+  }).where(eq(ordersTable.id, orderId));
+
+  // Deliver digital codes
+  const items = (order.items as unknown as Array<{ productId: number }>) || [];
+  for (const item of items) {
+    const [product] = await db.select().from(productsTable).where(eq(productsTable.id, item.productId));
+    if (product?.type === "digital") {
+      const [code] = await db.select().from(digitalCodesTable).where(
+        and(eq(digitalCodesTable.productId, item.productId), eq(digitalCodesTable.used, false))
+      );
+      if (code) {
+        await db.update(digitalCodesTable).set({ used: true, usedAt: new Date() }).where(eq(digitalCodesTable.id, code.id));
+        try {
+          await sendWhatsappMessage(order.customerPhone, `شكراً لطلبك! كود المنتج "${product.name}":\n${code.code}`);
+        } catch {}
+      }
+    }
+  }
+
+  try {
+    await sendWhatsappMessage(order.customerPhone, `✅ تم تأكيد التحويل البنكي لطلبك #${order.id}. شكراً لثقتك بنا!`);
+  } catch {}
+
+  await consumeCoupon(order.couponCode);
+
+  if (order.affiliateCode) {
+    await creditAffiliate(order.id, order.affiliateCode, parseFloat(order.totalAmount as unknown as string), req.log);
+  }
+
+  res.json({ ok: true });
+});
+
 router.get("/payments/:orderId/status", async (req, res): Promise<void> => {
-  const orderId = parseInt(req.params["orderId"] || "0", 10);
+  const orderId = parseInt(String(req.params["orderId"] ?? "0"), 10);
   if (!orderId) {
     res.status(400).json({ error: "Invalid orderId" });
     return;

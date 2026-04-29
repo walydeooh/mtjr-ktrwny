@@ -6,3 +6,6 @@ export * from "./orders";
 export * from "./bookings";
 export * from "./whatsapp";
 export * from "./settings";
+export * from "./coupons";
+export * from "./affiliates";
+export * from "./campaigns";

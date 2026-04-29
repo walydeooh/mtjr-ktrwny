@@ -79,7 +79,9 @@ router.post("/customer-auth/request-otp", async (req, res): Promise<void> => {
     req.log.warn({ phone }, "WhatsApp not connected, OTP not delivered");
   }
 
-  res.json({ ok: true, expiresIn: OTP_TTL_SECONDS });
+  const devOtp = process.env.NODE_ENV === "production" ? undefined : code;
+  if (devOtp) req.log.info({ phone, code }, "DEV OTP generated");
+  res.json({ ok: true, expiresIn: OTP_TTL_SECONDS, devOtp });
 });
 
 router.post("/customer-auth/verify-otp", async (req, res): Promise<void> => {

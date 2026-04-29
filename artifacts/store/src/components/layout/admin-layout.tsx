@@ -13,6 +13,11 @@ import {
   LogOut,
   Store,
   Menu,
+  Ticket,
+  Megaphone,
+  Share2,
+  UserCog,
+  Palette,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -23,7 +28,12 @@ const navItems = [
   { href: "/admin/products", label: "المنتجات", icon: Package },
   { href: "/admin/customers", label: "العملاء", icon: Users },
   { href: "/admin/bookings", label: "الحجوزات", icon: CalendarDays },
-  { href: "/admin/whatsapp", label: "واتساب المدعوم بالذكاء الاصطناعي", icon: MessageSquare },
+  { href: "/admin/coupons", label: "الكوبونات", icon: Ticket },
+  { href: "/admin/affiliates", label: "المسوّقون", icon: Share2 },
+  { href: "/admin/campaigns", label: "الحملات التسويقية", icon: Megaphone },
+  { href: "/admin/whatsapp", label: "واتساب الذكي", icon: MessageSquare },
+  { href: "/admin/employees", label: "الموظفون", icon: UserCog },
+  { href: "/admin/design", label: "تصميم المتجر", icon: Palette },
   { href: "/admin/settings", label: "الإعدادات", icon: Settings },
 ];
 

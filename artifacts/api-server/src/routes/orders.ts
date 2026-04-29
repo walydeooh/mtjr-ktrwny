@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { db, ordersTable, customersTable, productsTable, digitalCodesTable } from "@workspace/db";
-import { eq, and } from "drizzle-orm";
+import { db, ordersTable, customersTable, productsTable, digitalCodesTable, couponsTable, affiliatesTable, affiliateReferralsTable } from "@workspace/db";
+import { eq, and, sql } from "drizzle-orm";
 import {
   CreateOrderBody,
   UpdateOrderBody,
@@ -54,7 +54,7 @@ router.post("/orders", async (req, res): Promise<void> => {
     return;
   }
 
-  let totalAmount = 0;
+  let subtotal = 0;
   const orderItems = [];
 
   for (const item of parsed.data.items) {
@@ -65,7 +65,7 @@ router.post("/orders", async (req, res): Promise<void> => {
     }
     const unitPrice = parseFloat(product.price as unknown as string);
     const totalPrice = unitPrice * item.quantity;
-    totalAmount += totalPrice;
+    subtotal += totalPrice;
     orderItems.push({
       id: product.id,
       productId: product.id,
@@ -74,6 +74,36 @@ router.post("/orders", async (req, res): Promise<void> => {
       unitPrice,
       totalPrice,
     });
+  }
+
+  // Coupon application
+  let discountAmount = 0;
+  let couponCode: string | null = null;
+  const extras = req.body as { couponCode?: string; affiliateCode?: string; paymentMethod?: string };
+  if (extras.couponCode) {
+    const code = String(extras.couponCode).trim().toUpperCase();
+    const [coupon] = await db.select().from(couponsTable).where(eq(couponsTable.code, code));
+    if (coupon && coupon.active) {
+      const expired = coupon.expiresAt && coupon.expiresAt < new Date();
+      const exhausted = coupon.maxUses !== null && coupon.usedCount >= coupon.maxUses;
+      const minOk = subtotal >= parseFloat(coupon.minOrderAmount as unknown as string);
+      if (!expired && !exhausted && minOk) {
+        const v = parseFloat(coupon.discountValue as unknown as string);
+        discountAmount = coupon.discountType === "percent" ? (subtotal * v) / 100 : v;
+        if (discountAmount > subtotal) discountAmount = subtotal;
+        discountAmount = Math.round(discountAmount * 100) / 100;
+        couponCode = code;
+      }
+    }
+  }
+  const totalAmount = Math.max(0, subtotal - discountAmount);
+
+  // Affiliate code (just record on the order; commission credited on payment)
+  let affiliateCode: string | null = null;
+  if (extras.affiliateCode) {
+    const aff = String(extras.affiliateCode).trim().toUpperCase();
+    const [a] = await db.select().from(affiliatesTable).where(eq(affiliatesTable.code, aff));
+    if (a && a.active) affiliateCode = aff;
   }
 
   let customerId: number | null = null;
@@ -102,9 +132,16 @@ router.post("/orders", async (req, res): Promise<void> => {
     totalAmount: String(totalAmount),
     status: "pending",
     paymentStatus: "unpaid",
+    paymentMethod: extras.paymentMethod === "bank_transfer" ? "bank_transfer" : null,
+    couponCode,
+    discountAmount: String(discountAmount),
+    affiliateCode,
     notes: parsed.data.notes || null,
     source: parsed.data.source || "web",
   }).returning();
+
+  // Coupon usage is incremented on successful payment, not at order creation,
+  // to prevent unpaid orders from depleting coupon limits.
 
   res.status(201).json(formatOrder(order));
 });
