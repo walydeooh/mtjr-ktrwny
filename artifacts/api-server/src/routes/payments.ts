@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { db, ordersTable, storeSettingsTable, productsTable, digitalCodesTable, affiliatesTable, affiliateReferralsTable, couponsTable } from "@workspace/db";
 import { eq, and, sql, isNull, or } from "drizzle-orm";
 import { sendWhatsappMessage } from "../lib/whatsapp";
+import { getPaylinkInvoice } from "../lib/paylink";
 import { requireAuth } from "../middlewares/auth";
 
 async function creditAffiliate(orderId: number, code: string, totalAmount: number, log: { warn: (o: unknown, m?: string) => void }) {
@@ -75,38 +76,50 @@ router.get("/payments/callback", async (req, res): Promise<void> => {
   let paid = false;
   const [settings] = await db.select().from(storeSettingsTable);
 
-  if (transactionNo && settings?.paylinkApiKey && settings?.paylinkSecretKey) {
-    try {
-      const r = await fetch(`https://restapi.paylink.sa/api/getInvoice/${transactionNo}`, {
-        headers: {
-          apiId: settings.paylinkApiKey,
-          apiPassword: settings.paylinkSecretKey,
-        },
-      });
-      if (r.ok) {
-        const data = await r.json() as { orderStatus?: string; orderNumber?: string; amount?: number };
-        const statusOk = String(data.orderStatus || "").toLowerCase() === "paid";
-        // Bind invoice to order: orderNumber must match our order.id
-        const orderNumberOk = String(data.orderNumber || "") === String(orderId);
-        // Amount must match within 1 halala tolerance
-        const expectedAmount = parseFloat(order.totalAmount as unknown as string);
-        const amountOk = typeof data.amount === "number" && Math.abs(data.amount - expectedAmount) < 0.01;
-        paid = statusOk && orderNumberOk && amountOk;
-        if (statusOk && !paid) {
-          req.log.warn({ orderId, transactionNo, returnedOrderNumber: data.orderNumber, returnedAmount: data.amount, expectedAmount }, "Paylink invoice paid but order/amount mismatch");
-        }
+  // Prefer the transactionNo passed by Paylink in the callback, but fall back
+  // to the one we stored at order creation in case Paylink doesn't echo it.
+  const verifyTxNo = transactionNo || order.paylinkTransactionNo || "";
+
+  if (verifyTxNo && settings?.paylinkApiKey && settings?.paylinkSecretKey) {
+    const data = await getPaylinkInvoice(
+      { apiKey: settings.paylinkApiKey, secretKey: settings.paylinkSecretKey },
+      verifyTxNo,
+    );
+    if (data) {
+      const statusOk = data.orderStatus.toLowerCase() === "paid";
+      const orderNumberOk = data.orderNumber === String(orderId);
+      const expectedAmount = parseFloat(order.totalAmount as unknown as string);
+      const amountOk = Math.abs(data.amount - expectedAmount) < 0.01;
+      paid = statusOk && orderNumberOk && amountOk;
+      if (statusOk && !paid) {
+        req.log.warn(
+          { orderId, transactionNo: verifyTxNo, returnedOrderNumber: data.orderNumber, returnedAmount: data.amount, expectedAmount },
+          "Paylink invoice paid but order/amount mismatch",
+        );
       }
-    } catch (e) {
-      req.log.warn({ err: e }, "Failed to verify Paylink invoice");
     }
   }
 
   if (paid) {
-    await db.update(ordersTable).set({
+    // Atomic state transition: only this row update will succeed for the
+    // first concurrent callback. Subsequent duplicates get an empty result
+    // and skip all fulfillment side effects (digital code delivery, coupon
+    // consumption, affiliate credit, customer notification).
+    const updated = await db.update(ordersTable).set({
       paymentStatus: "paid",
       status: "processing",
-      paylinkTransactionNo: transactionNo,
-    }).where(eq(ordersTable.id, orderId));
+      paylinkTransactionNo: verifyTxNo,
+    }).where(and(
+      eq(ordersTable.id, orderId),
+      sql`${ordersTable.paymentStatus} != 'paid'`,
+    )).returning({ id: ordersTable.id });
+
+    if (updated.length === 0) {
+      // Already paid by a concurrent callback — just redirect to success.
+      req.log.info({ orderId }, "Duplicate paid callback ignored");
+      res.redirect(`${origin}/payment/success?orderId=${orderId}`);
+      return;
+    }
 
     // Deliver digital codes if any
     const items = (order.items as unknown as Array<{ productId: number; quantity: number }>) || [];

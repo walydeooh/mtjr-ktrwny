@@ -229,41 +229,39 @@ router.post("/orders/:id/payment", async (req, res): Promise<void> => {
   const origin = process.env["REPLIT_DEV_DOMAIN"]
     ? `https://${process.env["REPLIT_DEV_DOMAIN"]}`
     : (process.env["REPLIT_DOMAINS"] ? `https://${process.env["REPLIT_DOMAINS"].split(",")[0]}` : "http://localhost");
-  let paymentUrl = `${origin}/payment/success?orderId=${order.id}&mock=1`;
-  let paylinkTransactionNo: string | null = null;
 
-  if (settings?.paylinkApiKey && settings?.paylinkSecretKey) {
-    try {
-      const paylinkRes = await fetch("https://restapi.paylink.sa/api/addInvoice", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          apiId: settings.paylinkApiKey,
-          apiPassword: settings.paylinkSecretKey,
-        },
-        body: JSON.stringify({
-          amount,
-          callBackUrl: `${origin}/api/payments/callback?orderId=${order.id}`,
-          clientEmail: "customer@example.com",
-          clientMobile: order.customerPhone,
-          clientName: order.customerName,
-          currency: "SAR",
-          note: `طلب رقم ${order.id}`,
-          orderNumber: String(order.id),
-          products: [{ title: "طلب من المتجر", price: amount, qty: 1 }],
-        }),
-      });
-      if (paylinkRes.ok) {
-        const data = await paylinkRes.json() as { url?: string; paymentUrl?: string; transactionNo?: string; gatewayOrderRequestId?: string };
-        const url = data.url || data.paymentUrl;
-        if (url) paymentUrl = url;
-        paylinkTransactionNo = data.transactionNo || data.gatewayOrderRequestId || null;
-      } else {
-        req.log.warn({ status: paylinkRes.status }, "Paylink API returned non-OK");
-      }
-    } catch (e) {
-      req.log.warn({ err: e }, "Paylink API error, using mock payment link");
-    }
+  // Require Paylink to be configured. We refuse to silently fall back to a
+  // mock URL because customers will think they paid when they didn't.
+  if (!settings?.paylinkApiKey || !settings?.paylinkSecretKey) {
+    req.log.warn({ orderId: order.id }, "Paylink not configured, cannot create real invoice");
+    res.status(503).json({
+      error: "خدمة الدفع الإلكتروني غير مفعّلة حالياً. يرجى التواصل مع الإدارة أو استخدام التحويل البنكي.",
+    });
+    return;
+  }
+
+  let paymentUrl: string;
+  let paylinkTransactionNo: string;
+  try {
+    const { createPaylinkInvoice } = await import("../lib/paylink");
+    const invoice = await createPaylinkInvoice(
+      { apiKey: settings.paylinkApiKey, secretKey: settings.paylinkSecretKey },
+      {
+        amount,
+        orderId: order.id,
+        customerName: order.customerName,
+        customerPhone: order.customerPhone,
+        callBackUrl: `${origin}/api/payments/callback?orderId=${order.id}`,
+      },
+    );
+    paymentUrl = invoice.url;
+    paylinkTransactionNo = invoice.transactionNo;
+  } catch (e) {
+    req.log.error({ err: (e as Error).message, orderId: order.id }, "Paylink invoice creation failed");
+    res.status(502).json({
+      error: "تعذّر إنشاء رابط الدفع، تحقق من إعدادات Paylink أو حاول لاحقاً.",
+    });
+    return;
   }
 
   await db.update(ordersTable).set({

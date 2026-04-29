@@ -94,8 +94,9 @@ The token getter in `main.tsx` switches based on `window.location.pathname`.
 
 ## Payments
 - `POST /api/orders/:id/payment` creates a Paylink invoice with `callBackUrl` = `/api/payments/callback?orderId=X`.
-- `GET /api/payments/callback?orderId=X&transactionNo=Y` verifies the invoice via Paylink REST API, marks the order paid, delivers digital codes via WhatsApp, then 302-redirects to `/payment/success` or `/payment/failed`.
-- If Paylink keys are missing, the system falls back to a mock URL `/payment/success?orderId=X&mock=1`.
+- `GET /api/payments/callback?orderId=X&transactionNo=Y` verifies the invoice via Paylink REST API (atomic `UPDATE ... WHERE payment_status != 'paid' RETURNING` so duplicate callbacks don't re-fulfill), marks the order paid, delivers digital codes via WhatsApp, then 302-redirects to `/payment/success` or `/payment/failed`.
+- **Paylink API client** (`artifacts/api-server/src/lib/paylink.ts`): proper two-step flow (POST `/api/auth` → cached Bearer token (25min TTL), then `addInvoice`/`getInvoice`). The previous implementation incorrectly sent `apiId`/`apiPassword` as raw headers and silently fell back to a fake `?mock=1` success URL. Now if Paylink is misconfigured or API call fails, `/orders/:id/payment` returns 503/502 instead of pretending success.
+- `/payment/success` now fetches `paymentStatus` from `/api/payments/:orderId/status` and only renders the success state if status is `paid`. Otherwise shows pending UI (with auto-refresh every 3s) or redirects to `/payment/failed`. Prevents customers from seeing fake success by URL-hacking.
 
 ## Notes
 - WhatsApp uses Baileys; QR is generated and shown in `/admin/whatsapp`. **Auth state is persisted in Postgres** (`whatsapp_auth_files` table) via a custom `usePostgresAuthState` adapter (`artifacts/api-server/src/lib/whatsapp-auth.ts`) that mirrors Baileys' multi-file layout. Survives container restarts and redeploys — the user only scans the QR once per device. Logging out (status 401 from WhatsApp) auto-clears the table so a fresh QR is generated. Socket uses `keepAliveIntervalMs: 25_000` to prevent idle drops, and `initInProgress` flag plus `if (sock)` guard prevent parallel init races.
