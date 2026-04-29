@@ -37,7 +37,15 @@ export default function CustomerLogin() {
           toast({ title: "تم إرسال الرمز", description: "تم إرسال رمز التحقق إلى رقمك على واتساب" });
           setStep("code");
         },
-        onError: () => toast({ variant: "destructive", title: "خطأ", description: "تعذّر إرسال رمز التحقق. تأكد من ربط واتساب المتجر." }),
+        onError: (err: unknown) => {
+          const e = err as { response?: { data?: { error?: string } }; data?: { error?: string }; message?: string };
+          const msg =
+            e?.response?.data?.error ||
+            e?.data?.error ||
+            e?.message ||
+            "تعذّر إرسال رمز التحقق. تأكد من ربط واتساب المتجر.";
+          toast({ variant: "destructive", title: "خطأ في إرسال الرمز", description: msg });
+        },
       }
     );
   };

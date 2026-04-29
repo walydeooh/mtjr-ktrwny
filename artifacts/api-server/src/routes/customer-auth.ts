@@ -53,10 +53,40 @@ router.post("/customer-auth/request-otp", async (req, res): Promise<void> => {
     res.status(429).json({ error: `يرجى الانتظار ${retryAfter} ثانية قبل طلب رمز جديد` });
     return;
   }
-  lastRequestAt.set(phone, Date.now());
+
+  // Verify WhatsApp is connected BEFORE generating/storing the OTP and before
+  // setting the cooldown — so the user can retry immediately if delivery fails
+  // and so we don't pretend success when nothing was sent.
+  const status = getWhatsappStatus();
+  if (!status.connected) {
+    req.log.warn({ phone }, "OTP request rejected: WhatsApp not connected");
+    res.status(503).json({
+      error: "خدمة الواتساب غير متصلة حالياً. يرجى المحاولة بعد قليل أو التواصل مع المتجر.",
+      reason: "whatsapp_disconnected",
+    });
+    return;
+  }
 
   const code = generateOtpCode();
   const expiresAt = new Date(Date.now() + OTP_TTL_SECONDS * 1000);
+  const message = `رمز التحقق الخاص بك في متجرنا: ${code}\n\nصالح لمدة 5 دقائق. لا تشارك هذا الرمز مع أحد.`;
+
+  // Set cooldown BEFORE awaiting send so rapid double-clicks can't spam
+  // WhatsApp while the first send is in flight. Cleared on failure so the
+  // user can retry immediately if delivery actually fails.
+  lastRequestAt.set(phone, Date.now());
+
+  try {
+    await sendWhatsappMessage(phone, message);
+  } catch (e) {
+    lastRequestAt.delete(phone);
+    req.log.warn({ err: e, phone }, "Failed to send OTP via WhatsApp");
+    res.status(503).json({
+      error: "تعذّر إرسال رمز التحقق عبر الواتساب. تأكد من رقم الهاتف وحاول مرة أخرى.",
+      reason: "whatsapp_send_failed",
+    });
+    return;
+  }
 
   await db.insert(customerOtpsTable).values({
     phone,
@@ -64,20 +94,7 @@ router.post("/customer-auth/request-otp", async (req, res): Promise<void> => {
     code,
     expiresAt,
   });
-
-  const message = `رمز التحقق الخاص بك في متجرنا: ${code}\n\nصالح لمدة 5 دقائق. لا تشارك هذا الرمز مع أحد.`;
-
-  const status = getWhatsappStatus();
-  if (status.connected) {
-    try {
-      await sendWhatsappMessage(phone, message);
-      req.log.info({ phone }, "OTP sent via WhatsApp");
-    } catch (e) {
-      req.log.warn({ err: e, phone }, "Failed to send OTP via WhatsApp");
-    }
-  } else {
-    req.log.warn({ phone }, "WhatsApp not connected, OTP not delivered");
-  }
+  req.log.info({ phone }, "OTP sent via WhatsApp");
 
   const devOtp = process.env.NODE_ENV === "production" ? undefined : code;
   if (devOtp) req.log.info({ phone, code }, "DEV OTP generated");
