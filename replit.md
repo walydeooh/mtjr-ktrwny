@@ -98,7 +98,7 @@ The token getter in `main.tsx` switches based on `window.location.pathname`.
 - If Paylink keys are missing, the system falls back to a mock URL `/payment/success?orderId=X&mock=1`.
 
 ## Notes
-- WhatsApp uses Baileys; QR is generated and shown in `/admin/whatsapp`. Sessions persist in `.wa-session/`.
+- WhatsApp uses Baileys; QR is generated and shown in `/admin/whatsapp`. **Auth state is persisted in Postgres** (`whatsapp_auth_files` table) via a custom `usePostgresAuthState` adapter (`artifacts/api-server/src/lib/whatsapp-auth.ts`) that mirrors Baileys' multi-file layout. Survives container restarts and redeploys — the user only scans the QR once per device. Logging out (status 401 from WhatsApp) auto-clears the table so a fresh QR is generated. Socket uses `keepAliveIntervalMs: 25_000` to prevent idle drops, and `initInProgress` flag plus `if (sock)` guard prevent parallel init races.
 - OpenAI key (`OPENAI_API_KEY`) needs to be set for AI auto-replies.
 - Paylink keys are configured via the Settings page in admin.
 
