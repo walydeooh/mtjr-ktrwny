@@ -112,6 +112,7 @@ router.post("/products/import-from-url", requireAuth, async (req, res): Promise<
   let ldDescription: string | null = null;
   let ldImage: string | null = null;
   let ldPrice: number | null = null;
+  let ldCurrency: string | null = null;
 
   // Walk a JSON-LD value tree and collect Product nodes (handles @graph, arrays, nested).
   function collectProducts(node: unknown, out: Record<string, unknown>[]): void {
@@ -124,19 +125,21 @@ router.post("/products/import-from-url", requireAuth, async (req, res): Promise<
     if (types.includes("Product")) out.push(obj);
     if (obj["@graph"]) collectProducts(obj["@graph"], out);
   }
-  // Pull a numeric price from an Offer (or AggregateOffer) node.
-  function priceFromOffer(offer: unknown): number | null {
+  // Pull a numeric price + currency from an Offer (or AggregateOffer) node.
+  // Preference order: lowPrice (sale) > price > highPrice — so discounted price wins.
+  function priceFromOffer(offer: unknown): { price: number; currency: string | null } | null {
     if (!offer) return null;
     if (Array.isArray(offer)) {
-      for (const o of offer) { const p = priceFromOffer(o); if (p !== null) return p; }
+      for (const o of offer) { const p = priceFromOffer(o); if (p) return p; }
       return null;
     }
     if (typeof offer !== "object") return null;
     const o = offer as Record<string, unknown>;
+    const cur = typeof o["priceCurrency"] === "string" ? (o["priceCurrency"] as string) : null;
     const candidates = [o["lowPrice"], o["price"], o["highPrice"]];
     for (const c of candidates) {
-      if (typeof c === "number" && !isNaN(c) && c > 0) return c;
-      if (typeof c === "string") { const n = parseFloat(c); if (!isNaN(n) && n > 0) return n; }
+      if (typeof c === "number" && !isNaN(c) && c > 0) return { price: c, currency: cur };
+      if (typeof c === "string") { const n = parseFloat(c); if (!isNaN(n) && n > 0) return { price: n, currency: cur }; }
     }
     return null;
   }
@@ -157,10 +160,53 @@ router.post("/products/import-from-url", requireAuth, async (req, res): Promise<
             ldImage = (img as Record<string, unknown>)["url"] as string;
           }
         }
-        if (ldPrice === null) ldPrice = priceFromOffer(p["offers"]);
+        if (ldPrice === null) {
+          const pr = priceFromOffer(p["offers"]);
+          if (pr) { ldPrice = pr.price; ldCurrency = pr.currency; }
+        }
       }
     } catch { /* ignore broken JSON-LD blocks */ }
   }
+
+  // --- 1b) Detect store's display currency + exchange rate (handles multi-currency stores
+  // like Salla where structured data is in USD but the customer sees SAR).
+  // We look for hints embedded in the page JS:
+  //   "exchangeRate":"3.7506..."  → conversion factor to apply to USD-priced data
+  //   "store_country":"SA"        → store's home country (maps to currency)
+  //   "currencies":{"SAR":{...,"amount":1},"USD":{...,"amount":0.2666}}  → multi-currency table
+  const storeCountryMatch = html.match(/"store_country"\s*:\s*"([A-Z]{2})"/);
+  const exchangeRateMatch = html.match(/"exchangeRate"\s*:\s*"?([\d.]+)"?/);
+  const dataCurrencyMatch = html.match(/"currencyCode"\s*:\s*"([A-Z]{3})"/);
+
+  // Map common Arab country codes → currency for Salla-style stores.
+  const COUNTRY_TO_CURRENCY: Record<string, string> = {
+    SA: "SAR", AE: "AED", KW: "KWD", BH: "BHD", QA: "QAR", OM: "OMR",
+    EG: "EGP", JO: "JOD", IQ: "IQD", LB: "LBP", YE: "YER", LY: "LYD",
+    DZ: "DZD", MA: "MAD", TN: "TND", SD: "SDG", US: "USD", GB: "GBP",
+  };
+  const storeCurrency = storeCountryMatch ? COUNTRY_TO_CURRENCY[storeCountryMatch[1]!] || null : null;
+  const dataCurrency = dataCurrencyMatch ? dataCurrencyMatch[1]! : null;
+  const exchangeRate = exchangeRateMatch ? parseFloat(exchangeRateMatch[1]!) : null;
+
+  // Convert a structured-data price into the store's display currency, if needed.
+  function convertToStoreCurrency(amount: number, fromCurrency: string | null): number {
+    if (!storeCurrency || !fromCurrency) return amount;
+    if (fromCurrency === storeCurrency) return amount;
+    // Salla pages embed an exchangeRate where the rate is "1 dataCurrency = N storeCurrency".
+    if (exchangeRate && fromCurrency === dataCurrency) {
+      return Math.round(amount * exchangeRate * 100) / 100;
+    }
+    // Try the multi-currency table: currencies.<code>.amount = price ratio relative to store currency.
+    const entryRe = new RegExp(`"${fromCurrency}"\\s*:\\s*\\{[^}]*"amount"\\s*:\\s*([0-9.]+)`);
+    const em = html.match(entryRe);
+    if (em) {
+      const ratio = parseFloat(em[1]!);
+      if (ratio > 0) return Math.round((amount / ratio) * 100) / 100;
+    }
+    return amount; // unknown — keep as-is rather than guess
+  }
+
+  if (ldPrice !== null) ldPrice = convertToStoreCurrency(ldPrice, ldCurrency);
 
   // --- 2) Meta tag fallback
   const meta = (name: string, attr: "name" | "property" = "property"): string | null => {
@@ -193,11 +239,20 @@ router.post("/products/import-from-url", requireAuth, async (req, res): Promise<
     }
   }
   // Price priority: JSON-LD > sale_price (discounted) > price (original) > og:price.
+  // Each meta tag may carry its own currency declaration that needs converting.
   const salePriceText = meta("product:sale_price:amount");
+  const salePriceCur = meta("product:sale_price:currency");
   const priceText = meta("product:price:amount") || meta("og:price:amount") || null;
+  const priceCur = meta("product:price:currency") || meta("og:price:currency") || null;
   let price: number | null = ldPrice;
-  if (price === null && salePriceText) { const n = parseFloat(salePriceText); if (!isNaN(n) && n > 0) price = n; }
-  if (price === null && priceText) { const n = parseFloat(priceText); if (!isNaN(n) && n > 0) price = n; }
+  if (price === null && salePriceText) {
+    const n = parseFloat(salePriceText);
+    if (!isNaN(n) && n > 0) price = convertToStoreCurrency(n, salePriceCur);
+  }
+  if (price === null && priceText) {
+    const n = parseFloat(priceText);
+    if (!isNaN(n) && n > 0) price = convertToStoreCurrency(n, priceCur);
+  }
 
   // --- 3) AI refinement (only fills GAPS — never overwrites trustworthy structured data).
   // If JSON-LD already gave us a long, real description, we keep it as-is.
