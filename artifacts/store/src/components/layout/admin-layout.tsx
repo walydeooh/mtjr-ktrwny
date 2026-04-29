@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { ReactNode } from "react";
+import { ReactNode, useEffect } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useLogout } from "@workspace/api-client-react";
 import {
@@ -32,16 +32,22 @@ export function AdminLayout({ children }: { children: ReactNode }) {
   const [location, setLocation] = useLocation();
   const logoutMutation = useLogout();
 
+  useEffect(() => {
+    if (!isLoading && !user) {
+      setLocation("/login");
+    }
+  }, [isLoading, user, setLocation]);
+
   if (isLoading) return <div className="min-h-screen flex items-center justify-center">جاري التحميل...</div>;
 
-  if (!user) {
-    setLocation("/login");
-    return null;
-  }
+  if (!user) return null;
 
   const handleLogout = () => {
     logoutMutation.mutate(undefined, {
-      onSuccess: () => setLocation("/login"),
+      onSuccess: () => {
+        localStorage.removeItem("token");
+        setLocation("/login");
+      },
     });
   };
 

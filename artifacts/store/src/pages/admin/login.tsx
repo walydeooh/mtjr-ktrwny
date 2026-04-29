@@ -2,7 +2,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { useLocation } from "wouter";
-import { useLogin } from "@workspace/api-client-react";
+import { useLogin, getGetMeQueryKey } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,6 +27,7 @@ export default function Login() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const loginMutation = useLogin();
+  const queryClient = useQueryClient();
 
   const form = useForm<z.infer<typeof loginSchema>>({
     resolver: zodResolver(loginSchema),
@@ -39,8 +41,9 @@ export default function Login() {
     loginMutation.mutate(
       { data: values },
       {
-        onSuccess: (data) => {
-          localStorage.setItem("token", data.token); // The API might use cookies, but we store it if returned
+        onSuccess: async (data) => {
+          localStorage.setItem("token", data.token);
+          await queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
           setLocation("/admin");
         },
         onError: () => {

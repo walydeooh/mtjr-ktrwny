@@ -60,17 +60,18 @@ export default function Whatsapp() {
   const { data: status, isLoading: isStatusLoading } = useGetWhatsappStatus({
     query: {
       queryKey: getGetWhatsappStatusQueryKey(),
-      refetchInterval: (data) => data?.connected ? false : 3000,
+      refetchInterval: (query) => (query.state.data as { connected?: boolean } | undefined)?.connected ? false : 3000,
     }
   });
 
-  const { data: qr, isLoading: isQrLoading, refetch: refetchQr } = useGetWhatsappQr({
+  const { data: qrData, isLoading: isQrLoading, refetch: refetchQr } = useGetWhatsappQr({
     query: {
       queryKey: getGetWhatsappQrQueryKey(),
-      enabled: status?.connected === false,
-      refetchInterval: 3000, // Poll every 3s
+      enabled: !status?.connected,
+      refetchInterval: 3000,
     }
   });
+  const qr = qrData as { qr?: string | null; status: string } | undefined;
 
   const disconnectWhatsapp = useDisconnectWhatsapp();
   
