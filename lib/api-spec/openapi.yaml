@@ -238,6 +238,95 @@ paths:
               schema:
                 $ref: "#/components/schemas/DigitalCode"
 
+  /products/{id}/codes/bulk:
+    post:
+      operationId: bulkAddProductCodes
+      tags: [products]
+      summary: Add many digital codes to a product at once
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [codes]
+              properties:
+                codes:
+                  type: array
+                  description: List of digital code strings; duplicates within the request are ignored.
+                  items:
+                    type: string
+                    minLength: 1
+      responses:
+        "201":
+          description: Codes added
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  added:
+                    type: integer
+                    description: Number of new codes inserted.
+                  skipped:
+                    type: integer
+                    description: Number of codes ignored because they were empty or duplicates.
+                  codes:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/DigitalCode"
+
+  /admin/assistant/chat:
+    post:
+      operationId: chatWithAssistant
+      tags: [assistant]
+      summary: Send a chat turn to the in-dashboard AI assistant
+      description: |
+        The client sends the full conversation history each turn. The server
+        runs an internal tool-calling loop with Anthropic and returns the
+        final assistant text reply plus the names of any tools that fired.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [messages]
+              properties:
+                messages:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    required: [role, content]
+                    properties:
+                      role:
+                        type: string
+                        enum: [user, assistant]
+                      content:
+                        type: string
+      responses:
+        "200":
+          description: Assistant reply
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [reply]
+                properties:
+                  reply:
+                    type: string
+                  toolsUsed:
+                    type: array
+                    items:
+                      type: string
+
   /products/{id}/availability:
     get:
       operationId: getProductAvailability

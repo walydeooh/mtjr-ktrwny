@@ -23,6 +23,10 @@ import type {
   AuthResponse,
   AutoReply,
   Booking,
+  BulkAddProductCodes201,
+  BulkAddProductCodesBody,
+  ChatWithAssistant200,
+  ChatWithAssistantBody,
   CreateAutoReplyBody,
   CreateBookingBody,
   CreateCustomerBody,
@@ -989,6 +993,183 @@ export const useAddProductCode = <
   TContext
 > => {
   return useMutation(getAddProductCodeMutationOptions(options));
+};
+
+/**
+ * @summary Add many digital codes to a product at once
+ */
+export const getBulkAddProductCodesUrl = (id: number) => {
+  return `/api/products/${id}/codes/bulk`;
+};
+
+export const bulkAddProductCodes = async (
+  id: number,
+  bulkAddProductCodesBody: BulkAddProductCodesBody,
+  options?: RequestInit,
+): Promise<BulkAddProductCodes201> => {
+  return customFetch<BulkAddProductCodes201>(getBulkAddProductCodesUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(bulkAddProductCodesBody),
+  });
+};
+
+export const getBulkAddProductCodesMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof bulkAddProductCodes>>,
+    TError,
+    { id: number; data: BodyType<BulkAddProductCodesBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof bulkAddProductCodes>>,
+  TError,
+  { id: number; data: BodyType<BulkAddProductCodesBody> },
+  TContext
+> => {
+  const mutationKey = ["bulkAddProductCodes"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof bulkAddProductCodes>>,
+    { id: number; data: BodyType<BulkAddProductCodesBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return bulkAddProductCodes(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type BulkAddProductCodesMutationResult = NonNullable<
+  Awaited<ReturnType<typeof bulkAddProductCodes>>
+>;
+export type BulkAddProductCodesMutationBody = BodyType<BulkAddProductCodesBody>;
+export type BulkAddProductCodesMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Add many digital codes to a product at once
+ */
+export const useBulkAddProductCodes = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof bulkAddProductCodes>>,
+    TError,
+    { id: number; data: BodyType<BulkAddProductCodesBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof bulkAddProductCodes>>,
+  TError,
+  { id: number; data: BodyType<BulkAddProductCodesBody> },
+  TContext
+> => {
+  return useMutation(getBulkAddProductCodesMutationOptions(options));
+};
+
+/**
+ * The client sends the full conversation history each turn. The server
+runs an internal tool-calling loop with Anthropic and returns the
+final assistant text reply plus the names of any tools that fired.
+
+ * @summary Send a chat turn to the in-dashboard AI assistant
+ */
+export const getChatWithAssistantUrl = () => {
+  return `/api/admin/assistant/chat`;
+};
+
+export const chatWithAssistant = async (
+  chatWithAssistantBody: ChatWithAssistantBody,
+  options?: RequestInit,
+): Promise<ChatWithAssistant200> => {
+  return customFetch<ChatWithAssistant200>(getChatWithAssistantUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(chatWithAssistantBody),
+  });
+};
+
+export const getChatWithAssistantMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof chatWithAssistant>>,
+    TError,
+    { data: BodyType<ChatWithAssistantBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof chatWithAssistant>>,
+  TError,
+  { data: BodyType<ChatWithAssistantBody> },
+  TContext
+> => {
+  const mutationKey = ["chatWithAssistant"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof chatWithAssistant>>,
+    { data: BodyType<ChatWithAssistantBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return chatWithAssistant(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ChatWithAssistantMutationResult = NonNullable<
+  Awaited<ReturnType<typeof chatWithAssistant>>
+>;
+export type ChatWithAssistantMutationBody = BodyType<ChatWithAssistantBody>;
+export type ChatWithAssistantMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Send a chat turn to the in-dashboard AI assistant
+ */
+export const useChatWithAssistant = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof chatWithAssistant>>,
+    TError,
+    { data: BodyType<ChatWithAssistantBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof chatWithAssistant>>,
+  TError,
+  { data: BodyType<ChatWithAssistantBody> },
+  TContext
+> => {
+  return useMutation(getChatWithAssistantMutationOptions(options));
 };
 
 /**

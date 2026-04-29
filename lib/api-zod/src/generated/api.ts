@@ -197,6 +197,45 @@ export const AddProductCodeBody = zod.object({
 });
 
 /**
+ * @summary Add many digital codes to a product at once
+ */
+export const BulkAddProductCodesParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const BulkAddProductCodesBody = zod.object({
+  codes: zod
+    .array(zod.string().min(1))
+    .describe(
+      "List of digital code strings; duplicates within the request are ignored.",
+    ),
+});
+
+/**
+ * The client sends the full conversation history each turn. The server
+runs an internal tool-calling loop with Anthropic and returns the
+final assistant text reply plus the names of any tools that fired.
+
+ * @summary Send a chat turn to the in-dashboard AI assistant
+ */
+
+export const ChatWithAssistantBody = zod.object({
+  messages: zod
+    .array(
+      zod.object({
+        role: zod.enum(["user", "assistant"]),
+        content: zod.string(),
+      }),
+    )
+    .min(1),
+});
+
+export const ChatWithAssistantResponse = zod.object({
+  reply: zod.string(),
+  toolsUsed: zod.array(zod.string()).optional(),
+});
+
+/**
  * @summary Get availability slots for booking product
  */
 export const GetProductAvailabilityParams = zod.object({

@@ -570,6 +570,42 @@ export const ListProductsType = {
   booking: "booking",
 } as const;
 
+export type BulkAddProductCodesBody = {
+  /** List of digital code strings; duplicates within the request are ignored. */
+  codes: string[];
+};
+
+export type BulkAddProductCodes201 = {
+  /** Number of new codes inserted. */
+  added?: number;
+  /** Number of codes ignored because they were empty or duplicates. */
+  skipped?: number;
+  codes?: DigitalCode[];
+};
+
+export type ChatWithAssistantBodyMessagesItemRole =
+  (typeof ChatWithAssistantBodyMessagesItemRole)[keyof typeof ChatWithAssistantBodyMessagesItemRole];
+
+export const ChatWithAssistantBodyMessagesItemRole = {
+  user: "user",
+  assistant: "assistant",
+} as const;
+
+export type ChatWithAssistantBodyMessagesItem = {
+  role: ChatWithAssistantBodyMessagesItemRole;
+  content: string;
+};
+
+export type ChatWithAssistantBody = {
+  /** @minItems 1 */
+  messages: ChatWithAssistantBodyMessagesItem[];
+};
+
+export type ChatWithAssistant200 = {
+  reply: string;
+  toolsUsed?: string[];
+};
+
 export type GetProductAvailabilityParams = {
   date?: string;
 };

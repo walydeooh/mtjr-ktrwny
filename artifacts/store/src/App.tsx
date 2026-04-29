@@ -35,6 +35,7 @@ import AdminDesign from "@/pages/admin/design";
 import AdminCategories from "@/pages/admin/categories";
 import AdminBanners from "@/pages/admin/banners";
 import AdminBankAccounts from "@/pages/admin/bank-accounts";
+import AdminAssistant from "@/pages/admin/assistant";
 import BankTransfer from "@/pages/payment-bank-transfer";
 import Affiliate from "@/pages/affiliate";
 import AffiliateDashboard from "@/pages/affiliate-dashboard";
@@ -99,6 +100,7 @@ function Router() {
         <Route path="/admin/categories" component={AdminCategories} />
         <Route path="/admin/banners" component={AdminBanners} />
         <Route path="/admin/bank-accounts" component={AdminBankAccounts} />
+        <Route path="/admin/assistant" component={AdminAssistant} />
         <Route path="/admin/settings" component={Settings} />
 
         {/* Storefront routes */}

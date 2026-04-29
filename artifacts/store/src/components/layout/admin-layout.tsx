@@ -21,12 +21,14 @@ import {
   Tag,
   Image as ImageIcon,
   Banknote,
+  Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 
 const navItems = [
   { href: "/admin", label: "الرئيسية", icon: LayoutDashboard },
+  { href: "/admin/assistant", label: "المساعد الذكي", icon: Sparkles },
   { href: "/admin/orders", label: "الطلبات", icon: ShoppingCart },
   { href: "/admin/products", label: "المنتجات", icon: Package },
   { href: "/admin/customers", label: "العملاء", icon: Users },

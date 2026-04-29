@@ -9,6 +9,7 @@ import {
   useUpdateProduct,
   useListProductCodes,
   useAddProductCode,
+  useBulkAddProductCodes,
   useGetProductAvailability,
   useAddAvailabilitySlot,
   getGetProductQueryKey,
@@ -216,10 +217,13 @@ export default function ProductForm() {
   // Sub-components for specific product types (Codes & Slots)
   const ProductCodes = () => {
     const [code, setCode] = useState("");
+    const [bulkText, setBulkText] = useState("");
+    const [showBulk, setShowBulk] = useState(false);
     const { data: codes } = useListProductCodes(productId, {
       query: { enabled: isEditing, queryKey: getListProductCodesQueryKey(productId) }
     });
     const addCode = useAddProductCode();
+    const bulkAdd = useBulkAddProductCodes();
 
     const handleAddCode = () => {
       if (!code.trim()) return;
@@ -230,6 +234,28 @@ export default function ProductForm() {
             toast({ title: "تمت الإضافة", description: "تم إضافة الكود بنجاح" });
             setCode("");
             queryClient.invalidateQueries({ queryKey: getListProductCodesQueryKey(productId) });
+          }
+        }
+      );
+    };
+
+    const parsedBulk = bulkText.split("\n").map(s => s.trim()).filter(Boolean);
+    const handleBulkAdd = () => {
+      if (parsedBulk.length === 0) return;
+      bulkAdd.mutate(
+        { id: productId, data: { codes: parsedBulk } },
+        {
+          onSuccess: (res) => {
+            toast({
+              title: "تمت الإضافة",
+              description: `أُضيف ${res.added ?? parsedBulk.length} كود${res.skipped ? ` (تخطّينا ${res.skipped} مكرر/فارغ)` : ""}`,
+            });
+            setBulkText("");
+            setShowBulk(false);
+            queryClient.invalidateQueries({ queryKey: getListProductCodesQueryKey(productId) });
+          },
+          onError: () => {
+            toast({ title: "فشل الإضافة", description: "تعذّر إضافة الأكواد، حاول مجدداً", variant: "destructive" });
           }
         }
       );
@@ -248,6 +274,49 @@ export default function ProductForm() {
             إضافة
           </Button>
         </div>
+
+        {!showBulk ? (
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full"
+            onClick={() => setShowBulk(true)}
+          >
+            إضافة مجموعة أكواد دفعة واحدة
+          </Button>
+        ) : (
+          <div className="border rounded-md p-3 space-y-2 bg-muted/30">
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium">إضافة دفعة أكواد</label>
+              <Button type="button" variant="ghost" size="sm" onClick={() => { setShowBulk(false); setBulkText(""); }}>
+                إلغاء
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              ضع كل كود في سطر مستقل. سيتم تجاهل الأسطر الفارغة والمكررات تلقائياً.
+            </p>
+            <Textarea
+              placeholder={"الصق الأكواد هنا، كل كود في سطر:\nCODE-1\nCODE-2\nCODE-3"}
+              value={bulkText}
+              onChange={(e) => setBulkText(e.target.value)}
+              rows={8}
+              className="font-mono"
+            />
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">
+                {parsedBulk.length} كود جاهز للإضافة
+              </span>
+              <Button
+                type="button"
+                onClick={handleBulkAdd}
+                disabled={parsedBulk.length === 0 || bulkAdd.isPending}
+              >
+                {bulkAdd.isPending ? "جارٍ الإضافة..." : `إضافة ${parsedBulk.length} كود`}
+              </Button>
+            </div>
+          </div>
+        )}
+
         <div className="border rounded-md divide-y">
           {codes?.map(c => (
             <div key={c.id} className="p-3 flex justify-between items-center">

@@ -19,6 +19,7 @@ import categoriesRouter from "./categories";
 import bannersRouter from "./banners";
 import bankAccountsRouter from "./bank-accounts";
 import productImportRouter from "./product-import";
+import assistantRouter from "./assistant";
 
 const router: IRouter = Router();
 
@@ -42,5 +43,6 @@ router.use(categoriesRouter);
 router.use(bannersRouter);
 router.use(bankAccountsRouter);
 router.use(productImportRouter);
+router.use(assistantRouter);
 
 export default router;
