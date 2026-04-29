@@ -39,7 +39,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowRight, Plus, Trash2, Key, Calendar } from "lucide-react";
+import { ArrowRight, Plus, Trash2, Key, Calendar, Sparkles, Tag, BookOpen } from "lucide-react";
 import { Link } from "wouter";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
@@ -50,8 +50,15 @@ const productSchema = z.object({
   imageUrl: z.string().url("رابط الصورة غير صحيح").optional().or(z.literal("")),
   type: z.enum(["digital", "physical", "booking"]),
   category: z.string().optional(),
+  categoryId: z.coerce.number().optional().nullable(),
   stock: z.coerce.number().min(0).optional().nullable(),
   active: z.boolean().default(true),
+  discountType: z.enum(["none", "percent", "fixed"]).default("none"),
+  discountValue: z.coerce.number().min(0).optional().nullable(),
+  usageInstructionsText: z.string().optional().nullable(),
+  usageInstructionsMediaUrl: z.string().optional().nullable(),
+  usageInstructionsMediaType: z.enum(["image", "video"]).optional().nullable(),
+  usageInstructionsLinkUrl: z.string().optional().nullable(),
 });
 
 type ProductFormValues = z.infer<typeof productSchema>;
@@ -83,15 +90,55 @@ export default function ProductForm() {
       imageUrl: "",
       type: "physical",
       category: "",
+      categoryId: null,
       stock: 0,
       active: true,
+      discountType: "none",
+      discountValue: 0,
+      usageInstructionsText: "",
+      usageInstructionsMediaUrl: "",
+      usageInstructionsMediaType: null,
+      usageInstructionsLinkUrl: "",
     },
   });
+
+  const [categories, setCategories] = useState<Array<{ id: number; name: string }>>([]);
+  const [importUrl, setImportUrl] = useState("");
+  const [importing, setImporting] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/categories").then(r => r.json()).then(setCategories).catch(() => {});
+  }, []);
+
+  async function handleImportFromUrl() {
+    if (!importUrl.trim()) return;
+    setImporting(true);
+    try {
+      const r = await fetch("/api/products/import-from-url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: importUrl }),
+      });
+      if (!r.ok) throw new Error("فشل الاستيراد");
+      const data = await r.json();
+      if (data.name) form.setValue("name", data.name);
+      if (data.description) form.setValue("description", data.description);
+      if (data.imageUrl) form.setValue("imageUrl", data.imageUrl);
+      if (data.price) form.setValue("price", parseFloat(data.price));
+      toast({ title: "تم الاستيراد", description: "تم تعبئة الحقول من الرابط. راجع البيانات قبل الحفظ." });
+      setImportUrl("");
+    } catch (e) {
+      toast({ variant: "destructive", title: "خطأ", description: (e as Error).message });
+    } finally {
+      setImporting(false);
+    }
+  }
 
   const watchType = form.watch("type");
 
   useEffect(() => {
     if (isEditing && product) {
+      const p = product as any;
       form.reset({
         name: product.name,
         description: product.description || "",
@@ -99,8 +146,15 @@ export default function ProductForm() {
         imageUrl: product.imageUrl || "",
         type: product.type,
         category: product.category || "",
+        categoryId: p.categoryId ?? null,
         stock: product.stock,
         active: product.active,
+        discountType: (p.discountType as "none" | "percent" | "fixed") || "none",
+        discountValue: p.discountValue ? parseFloat(p.discountValue) : 0,
+        usageInstructionsText: p.usageInstructionsText || "",
+        usageInstructionsMediaUrl: p.usageInstructionsMediaUrl || "",
+        usageInstructionsMediaType: p.usageInstructionsMediaType || null,
+        usageInstructionsLinkUrl: p.usageInstructionsLinkUrl || "",
       });
     }
   }, [isEditing, product, form]);
@@ -111,7 +165,14 @@ export default function ProductForm() {
       description: values.description?.trim() || null,
       imageUrl: values.imageUrl?.trim() || null,
       category: values.category?.trim() || null,
+      categoryId: values.categoryId || null,
       stock: values.type === "physical" ? (values.stock ?? 0) : null,
+      discountType: values.discountType || "none",
+      discountValue: values.discountType !== "none" ? (values.discountValue || 0) : 0,
+      usageInstructionsText: values.usageInstructionsText?.trim() || null,
+      usageInstructionsMediaUrl: values.usageInstructionsMediaUrl?.trim() || null,
+      usageInstructionsMediaType: values.usageInstructionsMediaType || null,
+      usageInstructionsLinkUrl: values.usageInstructionsLinkUrl?.trim() || null,
     };
     if (isEditing) {
       updateProduct.mutate(
@@ -406,17 +467,71 @@ export default function ProductForm() {
 
                       <FormField
                         control={form.control}
-                        name="category"
+                        name="categoryId"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>التصنيف</FormLabel>
-                            <FormControl>
-                              <Input placeholder="مثال: إلكترونيات، ملابس..." {...field} />
-                            </FormControl>
+                            <FormLabel className="flex items-center gap-2"><Tag className="w-4 h-4" /> التصنيف</FormLabel>
+                            <Select
+                              value={field.value ? String(field.value) : "none"}
+                              onValueChange={(v) => field.onChange(v === "none" ? null : parseInt(v, 10))}
+                            >
+                              <FormControl>
+                                <SelectTrigger><SelectValue placeholder="بدون تصنيف" /></SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                <SelectItem value="none">بدون تصنيف</SelectItem>
+                                {categories.map((c) => (
+                                  <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <FormDescription>
+                              <Link href="/admin/categories" className="text-primary hover:underline text-xs">إدارة التصنيفات</Link>
+                            </FormDescription>
                             <FormMessage />
                           </FormItem>
                         )}
                       />
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>الخصم</CardTitle>
+                      <CardDescription>إظهار سعر مخفّض مع شارة على بطاقة المنتج</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <FormField
+                        control={form.control}
+                        name="discountType"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>نوع الخصم</FormLabel>
+                            <Select onValueChange={field.onChange} value={field.value || "none"}>
+                              <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                              <SelectContent>
+                                <SelectItem value="none">بدون خصم</SelectItem>
+                                <SelectItem value="percent">نسبة %</SelectItem>
+                                <SelectItem value="fixed">قيمة ثابتة (ر.س)</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </FormItem>
+                        )}
+                      />
+                      {form.watch("discountType") !== "none" && (
+                        <FormField
+                          control={form.control}
+                          name="discountValue"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>قيمة الخصم</FormLabel>
+                              <FormControl>
+                                <Input type="number" step="0.01" {...field} value={field.value ?? ""} />
+                              </FormControl>
+                            </FormItem>
+                          )}
+                        />
+                      )}
                     </CardContent>
                   </Card>
 
@@ -440,6 +555,91 @@ export default function ProductForm() {
                                 <img src={field.value} alt="Preview" className="w-full h-full object-cover" />
                               </div>
                             )}
+                          </FormItem>
+                        )}
+                      />
+                    </CardContent>
+                  </Card>
+
+                  {!isEditing && (
+                    <Card className="border-primary/30 bg-primary/5">
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2 text-base">
+                          <Sparkles className="w-4 h-4 text-primary" /> استيراد من رابط
+                        </CardTitle>
+                        <CardDescription>الصق رابط منتج من أي متجر، وسنقوم بتعبئة الحقول تلقائياً.</CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-2">
+                        <Input
+                          value={importUrl}
+                          onChange={(e) => setImportUrl(e.target.value)}
+                          placeholder="https://example.com/product/..."
+                          dir="ltr"
+                          className="text-right"
+                        />
+                        <Button type="button" onClick={handleImportFromUrl} disabled={!importUrl.trim() || importing} className="w-full">
+                          {importing ? "جاري الاستيراد..." : "استيراد البيانات"}
+                        </Button>
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2 text-base">
+                        <BookOpen className="w-4 h-4" /> تعليمات الاستخدام
+                      </CardTitle>
+                      <CardDescription>تظهر للعميل بعد شراء المنتج</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <FormField
+                        control={form.control}
+                        name="usageInstructionsText"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>نص التعليمات</FormLabel>
+                            <FormControl>
+                              <Textarea {...field} value={field.value || ""} rows={4} placeholder="مثال: قم بفتح التطبيق ثم أدخل الكود..." />
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
+                      <div className="grid grid-cols-2 gap-3">
+                        <FormField
+                          control={form.control}
+                          name="usageInstructionsMediaType"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>نوع الوسائط</FormLabel>
+                              <Select onValueChange={(v) => field.onChange(v === "none" ? null : v)} value={field.value || "none"}>
+                                <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                                <SelectContent>
+                                  <SelectItem value="none">بدون</SelectItem>
+                                  <SelectItem value="image">صورة</SelectItem>
+                                  <SelectItem value="video">فيديو</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="usageInstructionsMediaUrl"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>رابط الوسائط</FormLabel>
+                              <FormControl><Input {...field} value={field.value || ""} dir="ltr" className="text-right" /></FormControl>
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                      <FormField
+                        control={form.control}
+                        name="usageInstructionsLinkUrl"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>رابط مرجعي (اختياري)</FormLabel>
+                            <FormControl><Input {...field} value={field.value || ""} dir="ltr" className="text-right" placeholder="https://..." /></FormControl>
                           </FormItem>
                         )}
                       />

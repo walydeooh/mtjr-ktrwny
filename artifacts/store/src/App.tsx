@@ -32,7 +32,12 @@ import AdminAffiliates from "@/pages/admin/affiliates";
 import AdminCampaigns from "@/pages/admin/campaigns";
 import AdminEmployees from "@/pages/admin/employees";
 import AdminDesign from "@/pages/admin/design";
+import AdminCategories from "@/pages/admin/categories";
+import AdminBanners from "@/pages/admin/banners";
+import AdminBankAccounts from "@/pages/admin/bank-accounts";
 import BankTransfer from "@/pages/payment-bank-transfer";
+import Affiliate from "@/pages/affiliate";
+import AffiliateDashboard from "@/pages/affiliate-dashboard";
 import { useLocation } from "wouter";
 import { ReactNode } from "react";
 
@@ -91,6 +96,9 @@ function Router() {
         <Route path="/admin/campaigns" component={AdminCampaigns} />
         <Route path="/admin/employees" component={AdminEmployees} />
         <Route path="/admin/design" component={AdminDesign} />
+        <Route path="/admin/categories" component={AdminCategories} />
+        <Route path="/admin/banners" component={AdminBanners} />
+        <Route path="/admin/bank-accounts" component={AdminBankAccounts} />
         <Route path="/admin/settings" component={Settings} />
 
         {/* Storefront routes */}
@@ -103,6 +111,8 @@ function Router() {
         <Route path="/payment/success" component={PaymentSuccess} />
         <Route path="/payment/failed" component={PaymentFailed} />
         <Route path="/payment/bank-transfer" component={BankTransfer} />
+        <Route path="/affiliate" component={Affiliate} />
+        <Route path="/affiliate/dashboard" component={AffiliateDashboard} />
 
         <Route component={NotFound} />
       </Switch>

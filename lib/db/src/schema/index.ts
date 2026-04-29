@@ -9,3 +9,6 @@ export * from "./settings";
 export * from "./coupons";
 export * from "./affiliates";
 export * from "./campaigns";
+export * from "./categories";
+export * from "./banners";
+export * from "./bank-accounts";

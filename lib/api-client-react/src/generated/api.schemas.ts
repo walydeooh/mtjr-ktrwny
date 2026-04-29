@@ -60,6 +60,19 @@ export const CreateProductBodyType = {
   booking: "booking",
 } as const;
 
+/**
+ * @nullable
+ */
+export type CreateProductBodyDiscountType =
+  | (typeof CreateProductBodyDiscountType)[keyof typeof CreateProductBodyDiscountType]
+  | null;
+
+export const CreateProductBodyDiscountType = {
+  none: "none",
+  percent: "percent",
+  fixed: "fixed",
+} as const;
+
 export interface CreateProductBody {
   name: string;
   /** @nullable */
@@ -71,8 +84,24 @@ export interface CreateProductBody {
   /** @nullable */
   category?: string | null;
   /** @nullable */
+  categoryId?: number | null;
+  /** @nullable */
   stock?: number | null;
   active?: boolean;
+  /** @nullable */
+  discountType?: CreateProductBodyDiscountType;
+  /** @nullable */
+  discountValue?: number | null;
+  /** @nullable */
+  usageInstructionsText?: string | null;
+  /** @nullable */
+  usageInstructionsMediaUrl?: string | null;
+  /** @nullable */
+  usageInstructionsMediaType?: string | null;
+  /** @nullable */
+  usageInstructionsLinkUrl?: string | null;
+  /** @nullable */
+  externalImportUrl?: string | null;
 }
 
 export type UpdateProductBodyType =
@@ -82,6 +111,19 @@ export const UpdateProductBodyType = {
   digital: "digital",
   physical: "physical",
   booking: "booking",
+} as const;
+
+/**
+ * @nullable
+ */
+export type UpdateProductBodyDiscountType =
+  | (typeof UpdateProductBodyDiscountType)[keyof typeof UpdateProductBodyDiscountType]
+  | null;
+
+export const UpdateProductBodyDiscountType = {
+  none: "none",
+  percent: "percent",
+  fixed: "fixed",
 } as const;
 
 export interface UpdateProductBody {
@@ -95,8 +137,24 @@ export interface UpdateProductBody {
   /** @nullable */
   category?: string | null;
   /** @nullable */
+  categoryId?: number | null;
+  /** @nullable */
   stock?: number | null;
   active?: boolean;
+  /** @nullable */
+  discountType?: UpdateProductBodyDiscountType;
+  /** @nullable */
+  discountValue?: number | null;
+  /** @nullable */
+  usageInstructionsText?: string | null;
+  /** @nullable */
+  usageInstructionsMediaUrl?: string | null;
+  /** @nullable */
+  usageInstructionsMediaType?: string | null;
+  /** @nullable */
+  usageInstructionsLinkUrl?: string | null;
+  /** @nullable */
+  externalImportUrl?: string | null;
 }
 
 export interface DigitalCode {

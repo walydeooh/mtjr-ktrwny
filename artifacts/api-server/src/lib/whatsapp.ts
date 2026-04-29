@@ -247,3 +247,17 @@ export async function sendWhatsappMessage(phone: string, message: string) {
   const jid = phone.includes("@") ? phone : `${phone.replace(/[^0-9]/g, "")}@s.whatsapp.net`;
   await (sock as { sendMessage(jid: string, content: { text: string }): Promise<void> }).sendMessage(jid, { text: message });
 }
+
+/**
+ * Best-effort send to the configured admin phone. Swallows all errors and
+ * just logs them — admin notifications are nice-to-have, never blocking.
+ * Pass settings.adminWhatsappPhone (or any phone string) as `adminPhone`.
+ */
+export async function notifyAdmin(adminPhone: string | null | undefined, message: string): Promise<void> {
+  if (!adminPhone) return;
+  try {
+    await sendWhatsappMessage(adminPhone, message);
+  } catch (err) {
+    logger.warn({ err: (err as Error).message, adminPhone }, "Admin notification failed");
+  }
+}

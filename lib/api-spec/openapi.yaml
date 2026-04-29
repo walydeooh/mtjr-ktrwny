@@ -983,10 +983,27 @@ components:
           enum: [digital, physical, booking]
         category:
           type: ["string", "null"]
+        categoryId:
+          type: ["integer", "null"]
         stock:
           type: ["integer", "null"]
         active:
           type: boolean
+        discountType:
+          type: ["string", "null"]
+          enum: [none, percent, fixed, null]
+        discountValue:
+          type: ["number", "null"]
+        usageInstructionsText:
+          type: ["string", "null"]
+        usageInstructionsMediaUrl:
+          type: ["string", "null"]
+        usageInstructionsMediaType:
+          type: ["string", "null"]
+        usageInstructionsLinkUrl:
+          type: ["string", "null"]
+        externalImportUrl:
+          type: ["string", "null"]
       required: [name, price, type]
 
     UpdateProductBody:
@@ -1005,10 +1022,27 @@ components:
           enum: [digital, physical, booking]
         category:
           type: ["string", "null"]
+        categoryId:
+          type: ["integer", "null"]
         stock:
           type: ["integer", "null"]
         active:
           type: boolean
+        discountType:
+          type: ["string", "null"]
+          enum: [none, percent, fixed, null]
+        discountValue:
+          type: ["number", "null"]
+        usageInstructionsText:
+          type: ["string", "null"]
+        usageInstructionsMediaUrl:
+          type: ["string", "null"]
+        usageInstructionsMediaType:
+          type: ["string", "null"]
+        usageInstructionsLinkUrl:
+          type: ["string", "null"]
+        externalImportUrl:
+          type: ["string", "null"]
 
     DigitalCode:
       type: object

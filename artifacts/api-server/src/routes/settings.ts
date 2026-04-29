@@ -17,6 +17,7 @@ function formatSettings(s: typeof storeSettingsTable.$inferSelect) {
     aiEnabled: s.aiEnabled,
     aiSystemPrompt: s.aiSystemPrompt || null,
     whatsappAutoReply: s.whatsappAutoReply,
+    adminWhatsappPhone: s.adminWhatsappPhone || null,
     themePrimaryColor: s.themePrimaryColor || "#0ea5e9",
     themeSecondaryColor: s.themeSecondaryColor || "#0284c7",
     bannerImageUrl: s.bannerImageUrl || null,
@@ -36,6 +37,10 @@ function formatSettings(s: typeof storeSettingsTable.$inferSelect) {
     bankAccountName: s.bankAccountName || null,
     bankAccountIban: s.bankIban || null,
     bankInstructions: s.bankAccountNumber || null,
+    floatingCartEnabled: s.floatingCartEnabled,
+    showCategoriesBar: s.showCategoriesBar,
+    affiliateEnabled: s.affiliateEnabled,
+    affiliateDefaultCommission: s.affiliateDefaultCommission || "10",
   };
 }
 
@@ -57,6 +62,7 @@ const STRING_FIELD_MAP: Record<string, string> = {
   storeCurrency: "storeCurrency",
   customDomain: "customDomain",
   aiSystemPrompt: "aiSystemPrompt",
+  adminWhatsappPhone: "adminWhatsappPhone",
   themePrimaryColor: "themePrimaryColor",
   themeSecondaryColor: "themeSecondaryColor",
   bannerImageUrl: "bannerImageUrl",
@@ -75,8 +81,16 @@ const STRING_FIELD_MAP: Record<string, string> = {
   bankAccountName: "bankAccountName",
   bankAccountIban: "bankIban",
   bankInstructions: "bankAccountNumber",
+  affiliateDefaultCommission: "affiliateDefaultCommission",
 };
-const BOOL_FIELDS = ["aiEnabled", "whatsappAutoReply", "bankTransferEnabled"] as const;
+const BOOL_FIELDS = [
+  "aiEnabled",
+  "whatsappAutoReply",
+  "bankTransferEnabled",
+  "floatingCartEnabled",
+  "showCategoriesBar",
+  "affiliateEnabled",
+] as const;
 const SECRET_FIELDS = ["paylinkApiKey", "paylinkSecretKey"] as const;
 
 router.patch("/settings", requireAuth, async (req, res): Promise<void> => {

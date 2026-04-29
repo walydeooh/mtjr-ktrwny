@@ -2,7 +2,8 @@ import { Link, useLocation } from "wouter";
 import { ReactNode, useEffect, useState } from "react";
 import { useCart } from "@/hooks/use-cart";
 import { useCustomerAuth } from "@/hooks/use-customer-auth";
-import { ShoppingCart, Store, Search, User, Package, LogOut, Phone, Mail, MapPin, Instagram, Twitter } from "lucide-react";
+import { ShoppingCart, Store, Search, User, Package, LogOut, Phone, Mail, MapPin, Instagram, Twitter, Share2 } from "lucide-react";
+import { FloatingCart } from "@/components/floating-cart";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -26,6 +27,8 @@ type StoreInfo = {
   socialTwitter: string | null;
   socialTiktok: string | null;
   socialSnapchat: string | null;
+  floatingCartEnabled?: boolean;
+  affiliateEnabled?: boolean;
 };
 
 function hexToHsl(hex: string): string {
@@ -121,6 +124,11 @@ export function StoreLayout({ children }: { children: ReactNode }) {
                   <DropdownMenuItem onClick={() => setLocation("/my-orders")}>
                     <Package className="w-4 h-4 ml-2" /> طلباتي
                   </DropdownMenuItem>
+                  {info?.affiliateEnabled !== false && (
+                    <DropdownMenuItem onClick={() => setLocation("/affiliate")}>
+                      <Share2 className="w-4 h-4 ml-2" /> برنامج المسوّقين
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => { logout(); setLocation("/"); }} className="text-red-600 focus:text-red-600">
                     <LogOut className="w-4 h-4 ml-2" /> تسجيل الخروج
@@ -147,6 +155,7 @@ export function StoreLayout({ children }: { children: ReactNode }) {
         </div>
       </header>
       <main className="flex-1 container mx-auto px-4 py-8">{children}</main>
+      {info?.floatingCartEnabled !== false && <FloatingCart />}
 
       <footer className="bg-white border-t mt-12">
         <div className="container mx-auto px-4 py-10 grid md:grid-cols-3 gap-8">

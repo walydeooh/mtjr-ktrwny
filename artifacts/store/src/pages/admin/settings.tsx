@@ -24,7 +24,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
-import { Save, Store, Globe, CreditCard, Bot, MessageSquare } from "lucide-react";
+import { Save, Store, Globe, CreditCard, Bot, MessageSquare, ShoppingCart, Share2 } from "lucide-react";
 
 const settingsSchema = z.object({
   storeName: z.string().min(2, "اسم المتجر مطلوب"),
@@ -36,6 +36,11 @@ const settingsSchema = z.object({
   paylinkSecretKey: z.string().optional().nullable(),
   aiEnabled: z.boolean(),
   whatsappAutoReply: z.boolean(),
+  adminWhatsappPhone: z.string().optional().nullable(),
+  floatingCartEnabled: z.boolean(),
+  showCategoriesBar: z.boolean(),
+  affiliateEnabled: z.boolean(),
+  affiliateDefaultCommission: z.string().optional().nullable(),
 });
 
 type SettingsFormValues = z.infer<typeof settingsSchema>;
@@ -62,6 +67,11 @@ export default function SettingsPage() {
       paylinkSecretKey: "",
       aiEnabled: true,
       whatsappAutoReply: true,
+      adminWhatsappPhone: "",
+      floatingCartEnabled: true,
+      showCategoriesBar: true,
+      affiliateEnabled: true,
+      affiliateDefaultCommission: "10",
     },
   });
 
@@ -77,6 +87,11 @@ export default function SettingsPage() {
         paylinkSecretKey: settings.paylinkSecretKey ? "••••••••••••••••" : "", // Mask real key
         aiEnabled: settings.aiEnabled,
         whatsappAutoReply: settings.whatsappAutoReply,
+        adminWhatsappPhone: (settings as any).adminWhatsappPhone || "",
+        floatingCartEnabled: (settings as any).floatingCartEnabled !== false,
+        showCategoriesBar: (settings as any).showCategoriesBar !== false,
+        affiliateEnabled: (settings as any).affiliateEnabled !== false,
+        affiliateDefaultCommission: (settings as any).affiliateDefaultCommission || "10",
       });
     }
   }, [settings, form]);
@@ -287,6 +302,94 @@ export default function SettingsPage() {
                     <FormControl>
                       <Switch checked={field.value} onCheckedChange={field.onChange} />
                     </FormControl>
+                  </FormItem>
+                )}
+              />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <ShoppingCart className="w-5 h-5 text-primary" />
+                <CardTitle>تجربة المتجر</CardTitle>
+              </div>
+              <CardDescription>إعدادات تظهر للعميل في الواجهة</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <FormField
+                control={form.control}
+                name="floatingCartEnabled"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                    <div className="space-y-0.5">
+                      <FormLabel className="text-base">السلة العائمة</FormLabel>
+                      <FormDescription>إظهار زر سلة عائم في أسفل الشاشة</FormDescription>
+                    </div>
+                    <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="showCategoriesBar"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                    <div className="space-y-0.5">
+                      <FormLabel className="text-base">شريط التصنيفات</FormLabel>
+                      <FormDescription>إظهار شريط فلترة التصنيفات في الصفحة الرئيسية</FormDescription>
+                    </div>
+                    <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="adminWhatsappPhone"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>رقم واتساب الإدارة (للإشعارات)</FormLabel>
+                    <FormControl>
+                      <Input {...field} value={field.value || ""} placeholder="+9665XXXXXXXX" dir="ltr" className="text-right" />
+                    </FormControl>
+                    <FormDescription>سيتم إرسال إشعار لهذا الرقم عند كل طلب جديد أو إيصال تحويل بنكي.</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <Share2 className="w-5 h-5 text-primary" />
+                <CardTitle>برنامج المسوّقين</CardTitle>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <FormField
+                control={form.control}
+                name="affiliateEnabled"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                    <div className="space-y-0.5">
+                      <FormLabel className="text-base">تفعيل البرنامج</FormLabel>
+                      <FormDescription>السماح للعملاء بالتسجيل كمسوّقين عبر /affiliate</FormDescription>
+                    </div>
+                    <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="affiliateDefaultCommission"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>نسبة العمولة الافتراضية %</FormLabel>
+                    <FormControl><Input type="number" {...field} value={field.value || ""} /></FormControl>
+                    <FormDescription>تطبق على المسوّقين الجدد عند الموافقة (يمكن تعديلها لكل مسوّق على حدة).</FormDescription>
+                    <FormMessage />
                   </FormItem>
                 )}
               />

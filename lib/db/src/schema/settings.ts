@@ -13,6 +13,8 @@ export const storeSettingsTable = pgTable("store_settings", {
   paylinkSecretKey: text("paylink_secret_key"),
   aiEnabled: boolean("ai_enabled").notNull().default(false),
   whatsappAutoReply: boolean("whatsapp_auto_reply").notNull().default(true),
+  // Admin notification phone — receives "new order" / "bank receipt" / "affiliate application" alerts.
+  adminWhatsappPhone: text("admin_whatsapp_phone"),
   // Contact info
   contactWhatsapp: text("contact_whatsapp"),
   contactEmail: text("contact_email"),
@@ -24,12 +26,17 @@ export const storeSettingsTable = pgTable("store_settings", {
   // Theme / Design editor
   themePrimaryColor: text("theme_primary_color").notNull().default("#2563eb"),
   themeSecondaryColor: text("theme_secondary_color").notNull().default("#1e40af"),
+  // Legacy single banner kept for backward compat; multi-banner lives in `banners` table.
   bannerImageUrl: text("banner_image_url"),
   bannerTitle: text("banner_title"),
   bannerSubtitle: text("banner_subtitle"),
   bannerCtaText: text("banner_cta_text"),
   bannerCtaUrl: text("banner_cta_url"),
-  // Bank transfer
+  // UX toggles
+  floatingCartEnabled: boolean("floating_cart_enabled").notNull().default(true),
+  showCategoriesBar: boolean("show_categories_bar").notNull().default(true),
+  // Bank transfer (legacy single-account fields kept for backward compat;
+  // multi-bank lives in `bank_accounts` table)
   bankTransferEnabled: boolean("bank_transfer_enabled").notNull().default(false),
   bankName: text("bank_name"),
   bankAccountName: text("bank_account_name"),
@@ -37,6 +44,9 @@ export const storeSettingsTable = pgTable("store_settings", {
   bankAccountNumber: text("bank_account_number"),
   // AI
   aiSystemPrompt: text("ai_system_prompt"),
+  // Affiliate program
+  affiliateEnabled: boolean("affiliate_enabled").notNull().default(true),
+  affiliateDefaultCommission: text("affiliate_default_commission").default("10"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });
 

@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 import { arSA } from "date-fns/locale";
-import { Package, ChevronLeft, LogOut } from "lucide-react";
+import { Package, ChevronLeft, LogOut, Key, Copy, ExternalLink, BookOpen } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 const STATUS_LABEL: Record<string, string> = {
   pending: "جديد",
@@ -36,6 +37,12 @@ const PAYMENT_VARIANT: Record<string, "default" | "secondary" | "destructive" | 
 export default function MyOrders() {
   const { customer, isAuthenticated, logout } = useCustomerAuth();
   const [, setLocation] = useLocation();
+  const { toast } = useToast();
+
+  function copyCode(code: string) {
+    navigator.clipboard.writeText(code);
+    toast({ title: "تم نسخ الكود" });
+  }
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -105,6 +112,44 @@ export default function MyOrders() {
                       </div>
                     ))}
                   </div>
+                  {(order as any).digitalCodes && (order as any).digitalCodes.length > 0 && (
+                    <div className="rounded-lg border-2 border-primary/30 bg-primary/5 p-4 mb-4 space-y-3">
+                      <div className="flex items-center gap-2 font-bold text-primary">
+                        <Key className="w-4 h-4" /> الأكواد الرقمية الخاصة بطلبك
+                      </div>
+                      {(order as any).digitalCodes.map((dc: any, i: number) => (
+                        <div key={i} className="bg-background rounded-md p-3 border space-y-2">
+                          <div className="text-sm font-medium">{dc.productName}</div>
+                          <div className="flex items-center gap-2">
+                            <code className="flex-1 font-mono text-base bg-muted rounded px-3 py-2 select-all" dir="ltr">{dc.code}</code>
+                            <Button variant="outline" size="icon" onClick={() => copyCode(dc.code)}><Copy className="w-4 h-4" /></Button>
+                          </div>
+                          {(dc.usageInstructionsText || dc.usageInstructionsMediaUrl || dc.usageInstructionsLinkUrl) && (
+                            <div className="border-t pt-2 mt-2 space-y-2">
+                              <div className="flex items-center gap-1 text-xs font-semibold text-muted-foreground">
+                                <BookOpen className="w-3 h-3" /> طريقة الاستخدام
+                              </div>
+                              {dc.usageInstructionsText && <p className="text-sm whitespace-pre-wrap">{dc.usageInstructionsText}</p>}
+                              {dc.usageInstructionsMediaUrl && dc.usageInstructionsMediaType === "image" && (
+                                <img src={dc.usageInstructionsMediaUrl} alt="" className="rounded-md max-h-48 w-auto" />
+                              )}
+                              {dc.usageInstructionsMediaUrl && dc.usageInstructionsMediaType === "video" && (
+                                <video src={dc.usageInstructionsMediaUrl} controls className="rounded-md max-h-48 w-auto" />
+                              )}
+                              {dc.usageInstructionsLinkUrl && (
+                                <Button asChild size="sm" variant="outline" className="text-xs">
+                                  <a href={dc.usageInstructionsLinkUrl} target="_blank" rel="noreferrer">
+                                    <ExternalLink className="w-3 h-3 ml-1" /> فتح الرابط
+                                  </a>
+                                </Button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                      <p className="text-xs text-muted-foreground">تم إرسال الأكواد أيضاً عبر واتساب على رقمك.</p>
+                    </div>
+                  )}
                   <div className="flex items-center justify-between pt-3 border-t">
                     <span className="text-xs text-muted-foreground">
                       {format(new Date(order.createdAt), "PPP", { locale: arSA })}

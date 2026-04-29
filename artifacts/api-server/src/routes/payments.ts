@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db, ordersTable, storeSettingsTable, productsTable, digitalCodesTable, affiliatesTable, affiliateReferralsTable, couponsTable } from "@workspace/db";
 import { eq, and, sql, isNull, or } from "drizzle-orm";
-import { sendWhatsappMessage } from "../lib/whatsapp";
+import { sendWhatsappMessage, notifyAdmin } from "../lib/whatsapp";
 import { getPaylinkInvoice } from "../lib/paylink";
 import { requireAuth } from "../middlewares/auth";
 
@@ -145,7 +145,7 @@ router.get("/payments/callback", async (req, res): Promise<void> => {
           and(eq(digitalCodesTable.productId, item.productId), eq(digitalCodesTable.used, false))
         );
         if (code) {
-          await db.update(digitalCodesTable).set({ used: true, usedAt: new Date() }).where(eq(digitalCodesTable.id, code.id));
+          await db.update(digitalCodesTable).set({ used: true, usedAt: new Date(), orderId: order.id }).where(eq(digitalCodesTable.id, code.id));
           try {
             await sendWhatsappMessage(order.customerPhone, `شكراً لطلبك! كود المنتج "${product.name}":\n${code.code}`);
           } catch {}
@@ -170,12 +170,31 @@ router.get("/payments/callback", async (req, res): Promise<void> => {
   res.redirect(`${origin}/payment/failed?orderId=${orderId}`);
 });
 
-// Submit a bank-transfer receipt for an order (customer-side or admin)
+// Submit a bank-transfer receipt for an order. Either:
+//   - The authenticated customer (via customer_token header) who owns the order, OR
+//   - An admin (via Bearer admin token).
+// Rejects all other callers to prevent IDOR (anonymous tampering with arbitrary order IDs).
 router.post("/payments/:orderId/bank-transfer", async (req, res): Promise<void> => {
   const orderId = parseInt(String(req.params["orderId"] ?? "0"), 10);
   const receiptUrl = (req.body as { receiptUrl?: string })?.receiptUrl;
   const [order] = await db.select().from(ordersTable).where(eq(ordersTable.id, orderId));
   if (!order) { res.status(404).json({ error: "الطلب غير موجود" }); return; }
+
+  // --- Authorization: must be admin OR the customer who placed this order ---
+  // Admin and customer tokens both arrive via Authorization: Bearer; try each in turn.
+  const bearer = (req.headers.authorization || "").replace(/^Bearer\s+/i, "");
+  let authorized = false;
+  if (bearer) {
+    const { verifyToken } = await import("../lib/auth");
+    if (verifyToken(bearer)?.id) authorized = true;
+    if (!authorized) {
+      const { verifyCustomerToken } = await import("../lib/customer-auth");
+      const cust = verifyCustomerToken(bearer);
+      if (cust?.phone && cust.phone === order.customerPhone) authorized = true;
+    }
+  }
+  if (!authorized) { res.status(401).json({ error: "غير مصرح" }); return; }
+
   // Don't allow modification of an already-paid order or one that is already verified
   if (order.paymentStatus === "paid") { res.status(409).json({ error: "الطلب مدفوع بالفعل" }); return; }
   await db.update(ordersTable).set({
@@ -187,6 +206,22 @@ router.post("/payments/:orderId/bank-transfer", async (req, res): Promise<void> 
   try {
     await sendWhatsappMessage(order.customerPhone, `📤 استلمنا إشعار التحويل البنكي لطلبك #${order.id}. سيتم تأكيده خلال 24 ساعة.`);
   } catch {}
+
+  // Notify admin with a quick-confirm link
+  try {
+    const [settings] = await db.select().from(storeSettingsTable);
+    const acceptUrl = `${getStoreOrigin()}/admin/orders/${order.id}?action=confirm-bank`;
+    const msg =
+      `🏦 إشعار تحويل بنكي جديد لطلب #${order.id}\n` +
+      `العميل: ${order.customerName} — ${order.customerPhone}\n` +
+      `المبلغ: ${order.totalAmount} ر.س\n` +
+      (receiptUrl ? `الإيصال: ${receiptUrl}\n` : "") +
+      `راجع وأكّد الطلب: ${acceptUrl}`;
+    void notifyAdmin(settings?.adminWhatsappPhone, msg);
+  } catch (e) {
+    req.log.warn({ err: (e as Error).message }, "admin bank-receipt notification failed");
+  }
+
   res.json({ ok: true });
 });
 
@@ -211,7 +246,7 @@ router.post("/payments/:orderId/confirm-bank", requireAuth, async (req, res): Pr
         and(eq(digitalCodesTable.productId, item.productId), eq(digitalCodesTable.used, false))
       );
       if (code) {
-        await db.update(digitalCodesTable).set({ used: true, usedAt: new Date() }).where(eq(digitalCodesTable.id, code.id));
+        await db.update(digitalCodesTable).set({ used: true, usedAt: new Date(), orderId: order.id }).where(eq(digitalCodesTable.id, code.id));
         try {
           await sendWhatsappMessage(order.customerPhone, `شكراً لطلبك! كود المنتج "${product.name}":\n${code.code}`);
         } catch {}

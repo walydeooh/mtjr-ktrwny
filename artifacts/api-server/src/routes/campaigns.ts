@@ -12,7 +12,18 @@ const CampaignBody = z.object({
   name: z.string().min(2),
   message: z.string().min(2),
   scheduledAt: z.string().datetime().nullable().optional(),
+  delayMinSeconds: z.coerce.number().int().min(1).max(600).optional().default(5),
+  delayMaxSeconds: z.coerce.number().int().min(1).max(600).optional().default(50),
+  recipientPhones: z.string().nullable().optional(),
 });
+
+function parseRecipientPhones(raw: string | null | undefined): string[] {
+  if (!raw) return [];
+  return raw
+    .split(/[\n,;]+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+}
 
 function format(c: typeof whatsappCampaignsTable.$inferSelect) {
   return {
@@ -32,10 +43,15 @@ router.get("/campaigns", requireAuth, async (_req, res) => {
 router.post("/campaigns", requireAuth, async (req, res): Promise<void> => {
   const parsed = CampaignBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  const min = Math.min(parsed.data.delayMinSeconds ?? 5, parsed.data.delayMaxSeconds ?? 50);
+  const max = Math.max(parsed.data.delayMinSeconds ?? 5, parsed.data.delayMaxSeconds ?? 50);
   const [created] = await db.insert(whatsappCampaignsTable).values({
     name: parsed.data.name,
     message: parsed.data.message,
     scheduledAt: parsed.data.scheduledAt ? new Date(parsed.data.scheduledAt) : null,
+    delayMinSeconds: min,
+    delayMaxSeconds: max,
+    recipientPhones: parsed.data.recipientPhones ?? null,
     status: "draft",
   }).returning();
   res.json(format(created!));
@@ -56,32 +72,40 @@ router.post("/campaigns/:id/send", requireAuth, async (req, res): Promise<void> 
   const status = getWhatsappStatus();
   if (!status.connected) { res.status(400).json({ error: "واتساب غير متصل" }); return; }
 
-  const customers = await db.select().from(customersTable);
+  // Determine recipients: explicit list wins, else fall back to all customers.
+  const explicit = parseRecipientPhones(campaign.recipientPhones);
+  const phones: string[] = explicit.length > 0
+    ? explicit
+    : (await db.select().from(customersTable)).map((c) => c.phone);
+
   await db.update(whatsappCampaignsTable).set({
     status: "sending",
     startedAt: new Date(),
-    totalRecipients: customers.length,
+    totalRecipients: phones.length,
     sentCount: 0,
     failedCount: 0,
   }).where(eq(whatsappCampaignsTable.id, id));
 
-  res.json({ ok: true, queued: customers.length });
+  res.json({ ok: true, queued: phones.length });
 
-  // Fire-and-forget background send
+  const minMs = Math.max(1, campaign.delayMinSeconds) * 1000;
+  const maxMs = Math.max(minMs, campaign.delayMaxSeconds * 1000);
+
+  // Fire-and-forget background send with random human-like jitter.
   void (async () => {
     let sent = 0;
     let failed = 0;
-    for (const c of customers) {
+    for (const phone of phones) {
       try {
-        await sendWhatsappMessage(c.phone, campaign.message);
+        await sendWhatsappMessage(phone, campaign.message);
         sent++;
       } catch (e) {
         failed++;
-        logger.warn({ err: e, customerId: c.id }, "campaign send failed");
+        logger.warn({ err: e, phone }, "campaign send failed");
       }
-      // Throttle to avoid bans
-      await new Promise((r) => setTimeout(r, 1500));
-      if (sent % 5 === 0 || failed % 5 === 0) {
+      const delay = Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs;
+      await new Promise((r) => setTimeout(r, delay));
+      if ((sent + failed) % 5 === 0) {
         await db.update(whatsappCampaignsTable).set({ sentCount: sent, failedCount: failed }).where(eq(whatsappCampaignsTable.id, id));
       }
     }

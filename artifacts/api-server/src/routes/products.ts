@@ -58,11 +58,16 @@ router.post("/products", async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const [product] = await db.insert(productsTable).values({
+  const insertData: Record<string, unknown> = {
     ...parsed.data,
     price: String(parsed.data.price),
     active: parsed.data.active !== undefined ? parsed.data.active : true,
-  }).returning();
+  };
+  // Strip null values that would violate NOT NULL constraints (use defaults).
+  for (const k of ["discountType", "discountValue"]) {
+    if (insertData[k] === null) delete insertData[k];
+  }
+  const [product] = await db.insert(productsTable).values(insertData as never).returning();
   res.status(201).json(formatProduct(product));
 });
 
@@ -93,8 +98,11 @@ router.patch("/products/:id", async (req, res): Promise<void> => {
   }
   const updateData: Record<string, unknown> = { ...parsed.data };
   if (parsed.data.price !== undefined) updateData.price = String(parsed.data.price);
-
-  const [product] = await db.update(productsTable).set(updateData).where(eq(productsTable.id, params.data.id)).returning();
+  // Strip null for NOT NULL columns.
+  for (const k of ["discountType", "discountValue"]) {
+    if (updateData[k] === null) delete updateData[k];
+  }
+  const [product] = await db.update(productsTable).set(updateData as never).where(eq(productsTable.id, params.data.id)).returning();
   if (!product) {
     res.status(404).json({ error: "المنتج غير موجود" });
     return;

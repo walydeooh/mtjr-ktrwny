@@ -74,8 +74,23 @@ export const CreateProductBody = zod.object({
   imageUrl: zod.string().nullish(),
   type: zod.enum(["digital", "physical", "booking"]),
   category: zod.string().nullish(),
+  categoryId: zod.number().nullish(),
   stock: zod.number().nullish(),
   active: zod.boolean().optional(),
+  discountType: zod
+    .union([
+      zod.literal("none"),
+      zod.literal("percent"),
+      zod.literal("fixed"),
+      zod.literal(null),
+    ])
+    .nullish(),
+  discountValue: zod.number().nullish(),
+  usageInstructionsText: zod.string().nullish(),
+  usageInstructionsMediaUrl: zod.string().nullish(),
+  usageInstructionsMediaType: zod.string().nullish(),
+  usageInstructionsLinkUrl: zod.string().nullish(),
+  externalImportUrl: zod.string().nullish(),
 });
 
 /**
@@ -113,8 +128,23 @@ export const UpdateProductBody = zod.object({
   imageUrl: zod.string().nullish(),
   type: zod.enum(["digital", "physical", "booking"]).optional(),
   category: zod.string().nullish(),
+  categoryId: zod.number().nullish(),
   stock: zod.number().nullish(),
   active: zod.boolean().optional(),
+  discountType: zod
+    .union([
+      zod.literal("none"),
+      zod.literal("percent"),
+      zod.literal("fixed"),
+      zod.literal(null),
+    ])
+    .nullish(),
+  discountValue: zod.number().nullish(),
+  usageInstructionsText: zod.string().nullish(),
+  usageInstructionsMediaUrl: zod.string().nullish(),
+  usageInstructionsMediaType: zod.string().nullish(),
+  usageInstructionsLinkUrl: zod.string().nullish(),
+  externalImportUrl: zod.string().nullish(),
 });
 
 export const UpdateProductResponse = zod.object({

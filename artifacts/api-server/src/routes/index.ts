@@ -15,6 +15,10 @@ import couponsRouter from "./coupons";
 import affiliatesRouter from "./affiliates";
 import campaignsRouter from "./campaigns";
 import employeesRouter from "./employees";
+import categoriesRouter from "./categories";
+import bannersRouter from "./banners";
+import bankAccountsRouter from "./bank-accounts";
+import productImportRouter from "./product-import";
 
 const router: IRouter = Router();
 
@@ -34,5 +38,9 @@ router.use(couponsRouter);
 router.use(affiliatesRouter);
 router.use(campaignsRouter);
 router.use(employeesRouter);
+router.use(categoriesRouter);
+router.use(bannersRouter);
+router.use(bankAccountsRouter);
+router.use(productImportRouter);
 
 export default router;

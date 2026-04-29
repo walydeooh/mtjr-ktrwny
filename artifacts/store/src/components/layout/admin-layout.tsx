@@ -18,6 +18,9 @@ import {
   Share2,
   UserCog,
   Palette,
+  Tag,
+  Image as ImageIcon,
+  Banknote,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -34,6 +37,9 @@ const navItems = [
   { href: "/admin/whatsapp", label: "واتساب الذكي", icon: MessageSquare },
   { href: "/admin/employees", label: "الموظفون", icon: UserCog },
   { href: "/admin/design", label: "تصميم المتجر", icon: Palette },
+  { href: "/admin/banners", label: "البانرات", icon: ImageIcon },
+  { href: "/admin/categories", label: "التصنيفات", icon: Tag },
+  { href: "/admin/bank-accounts", label: "الحسابات البنكية", icon: Banknote },
   { href: "/admin/settings", label: "الإعدادات", icon: Settings },
 ];
 

@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
-import { db, ordersTable, customersTable, productsTable, digitalCodesTable, couponsTable, affiliatesTable, affiliateReferralsTable } from "@workspace/db";
-import { eq, and, sql } from "drizzle-orm";
+import { db, ordersTable, customersTable, productsTable, digitalCodesTable, couponsTable, affiliatesTable, storeSettingsTable } from "@workspace/db";
+import { computeCouponDiscount } from "./coupons";
+import { eq, and } from "drizzle-orm";
 import {
   CreateOrderBody,
   UpdateOrderBody,
@@ -10,7 +11,7 @@ import {
   CreateOrderPaymentParams,
   VerifyPaymentBody,
 } from "@workspace/api-zod";
-import { sendWhatsappMessage } from "../lib/whatsapp";
+import { sendWhatsappMessage, notifyAdmin } from "../lib/whatsapp";
 
 const router: IRouter = Router();
 
@@ -83,15 +84,10 @@ router.post("/orders", async (req, res): Promise<void> => {
   if (extras.couponCode) {
     const code = String(extras.couponCode).trim().toUpperCase();
     const [coupon] = await db.select().from(couponsTable).where(eq(couponsTable.code, code));
-    if (coupon && coupon.active) {
-      const expired = coupon.expiresAt && coupon.expiresAt < new Date();
-      const exhausted = coupon.maxUses !== null && coupon.usedCount >= coupon.maxUses;
-      const minOk = subtotal >= parseFloat(coupon.minOrderAmount as unknown as string);
-      if (!expired && !exhausted && minOk) {
-        const v = parseFloat(coupon.discountValue as unknown as string);
-        discountAmount = coupon.discountType === "percent" ? (subtotal * v) / 100 : v;
-        if (discountAmount > subtotal) discountAmount = subtotal;
-        discountAmount = Math.round(discountAmount * 100) / 100;
+    if (coupon) {
+      const r = computeCouponDiscount(coupon, subtotal, orderItems);
+      if (r.ok) {
+        discountAmount = r.discount;
         couponCode = code;
       }
     }
@@ -143,8 +139,34 @@ router.post("/orders", async (req, res): Promise<void> => {
   // Coupon usage is incremented on successful payment, not at order creation,
   // to prevent unpaid orders from depleting coupon limits.
 
+  // Best-effort: notify the store admin about every new order.
+  try {
+    const [settings] = await db.select().from(storeSettingsTable);
+    const itemsSummary = orderItems.slice(0, 5).map((it) => `• ${it.productName} ×${it.quantity}`).join("\n");
+    const more = orderItems.length > 5 ? `\n…و${orderItems.length - 5} منتجات أخرى` : "";
+    const acceptUrl = `${getStoreOrigin()}/admin/orders`;
+    const msg =
+      `🛒 طلب جديد #${order.id}\n` +
+      `العميل: ${order.customerName} — ${order.customerPhone}\n` +
+      `${itemsSummary}${more}\n` +
+      `المبلغ: ${order.totalAmount} ر.س\n` +
+      `الدفع: ${order.paymentMethod || "لم يحدد"}\n` +
+      `راجع الطلب: ${acceptUrl}`;
+    void notifyAdmin(settings?.adminWhatsappPhone, msg);
+  } catch (e) {
+    req.log.warn({ err: (e as Error).message }, "admin new-order notification failed");
+  }
+
   res.status(201).json(formatOrder(order));
 });
+
+function getStoreOrigin(): string {
+  const domain = process.env["REPLIT_DEV_DOMAIN"];
+  if (domain) return `https://${domain}`;
+  const domains = process.env["REPLIT_DOMAINS"];
+  if (domains) return `https://${domains.split(",")[0]}`;
+  return "http://localhost";
+}
 
 router.get("/orders/:id", async (req, res): Promise<void> => {
   const params = GetOrderParams.safeParse(req.params);
@@ -189,7 +211,7 @@ router.patch("/orders/:id", async (req, res): Promise<void> => {
           and(eq(digitalCodesTable.productId, item.productId), eq(digitalCodesTable.used, false))
         );
         if (code) {
-          await db.update(digitalCodesTable).set({ used: true, usedAt: new Date() }).where(eq(digitalCodesTable.id, code.id));
+          await db.update(digitalCodesTable).set({ used: true, usedAt: new Date(), orderId: order.id }).where(eq(digitalCodesTable.id, code.id));
           try {
             await sendWhatsappMessage(order.customerPhone, `شكراً لطلبك! كود المنتج الخاص بك هو: ${code.code}`);
           } catch {
@@ -273,10 +295,16 @@ router.post("/orders/:id/payment", async (req, res): Promise<void> => {
     status: "payment_pending",
   }).where(eq(ordersTable.id, order.id));
 
-  try {
-    await sendWhatsappMessage(order.customerPhone, `رابط الدفع لطلبك رقم #${order.id}: ${paymentUrl}`);
-  } catch {
-    req.log.warn("Could not send payment link via WhatsApp");
+  // Only push the payment link via WhatsApp for orders that originated in
+  // WhatsApp itself (the customer is on WhatsApp and expects the link there).
+  // Web orders already show the link in-page via the redirect; pushing it
+  // again over WhatsApp duplicates the experience and causes confusion.
+  if (order.source === "whatsapp") {
+    try {
+      await sendWhatsappMessage(order.customerPhone, `رابط الدفع لطلبك رقم #${order.id}: ${paymentUrl}`);
+    } catch {
+      req.log.warn("Could not send payment link via WhatsApp");
+    }
   }
 
   res.json({ paymentId, paymentUrl, amount, orderId: order.id });
