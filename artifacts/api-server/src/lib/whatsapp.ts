@@ -44,6 +44,40 @@ export function getQrCode() {
   };
 }
 
+/**
+ * Wait until the WhatsApp socket is connected, up to `timeoutMs`.
+ * If the socket is currently disconnected (e.g. after a cold start on
+ * Autoscale), this triggers initWhatsapp() so the next OTP request can
+ * succeed without the user seeing an instant failure.
+ *
+ * Returns true if connected within the window, false otherwise.
+ * Returns false immediately if status is "qr" — there's no point waiting,
+ * the operator hasn't scanned yet.
+ */
+export async function waitForConnection(timeoutMs = 25_000): Promise<boolean> {
+  if (connectionStatus === "connected") return true;
+  if (connectionStatus === "qr") return false;
+
+  // Kick off initialization if nothing is in flight. initWhatsapp() is
+  // idempotent (guarded by sock + initInProgress), so this is safe to call
+  // even if another request already triggered it.
+  if (!sock && !initInProgress) {
+    initWhatsapp().catch((err) => {
+      logger.warn({ err: (err as Error).message }, "waitForConnection: initWhatsapp failed");
+    });
+  }
+
+  const start = Date.now();
+  const pollMs = 250;
+  while (Date.now() - start < timeoutMs) {
+    await new Promise((r) => setTimeout(r, pollMs));
+    const status: string = connectionStatus;
+    if (status === "connected") return true;
+    if (status === "qr") return false;
+  }
+  return (connectionStatus as string) === "connected";
+}
+
 export async function initWhatsapp(onMessage?: MessageHandler) {
   if (onMessage) messageHandler = onMessage;
   if (sock || initInProgress) {

@@ -99,6 +99,7 @@ The token getter in `main.tsx` switches based on `window.location.pathname`.
 
 ## Notes
 - WhatsApp uses Baileys; QR is generated and shown in `/admin/whatsapp`. **Auth state is persisted in Postgres** (`whatsapp_auth_files` table) via a custom `usePostgresAuthState` adapter (`artifacts/api-server/src/lib/whatsapp-auth.ts`) that mirrors Baileys' multi-file layout. Survives container restarts and redeploys — the user only scans the QR once per device. Logging out (status 401 from WhatsApp) auto-clears the table so a fresh QR is generated. Socket uses `keepAliveIntervalMs: 25_000` to prevent idle drops, and `initInProgress` flag plus `if (sock)` guard prevent parallel init races.
+- **Cold-start tolerance for Autoscale**: `waitForConnection(timeoutMs)` in `whatsapp.ts` polls until the socket reconnects (and triggers `initWhatsapp` if needed). Used by `/customer-auth/request-otp` with a 25s window so the first OTP after a cold start succeeds instead of failing instantly. Returns false fast if status is `"qr"` (no point waiting — operator hasn't scanned).
 - OpenAI key (`OPENAI_API_KEY`) needs to be set for AI auto-replies.
 - Paylink keys are configured via the Settings page in admin.
 

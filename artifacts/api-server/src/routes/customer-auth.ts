@@ -6,7 +6,7 @@ import {
   VerifyCustomerOtpBody,
 } from "@workspace/api-zod";
 import { signCustomerToken, generateOtpCode, normalizePhone, verifyCustomerToken } from "../lib/customer-auth";
-import { sendWhatsappMessage, getWhatsappStatus } from "../lib/whatsapp";
+import { sendWhatsappMessage, waitForConnection } from "../lib/whatsapp";
 
 const router: IRouter = Router();
 const OTP_TTL_SECONDS = 300; // 5 minutes
@@ -54,12 +54,21 @@ router.post("/customer-auth/request-otp", async (req, res): Promise<void> => {
     return;
   }
 
-  // Verify WhatsApp is connected BEFORE generating/storing the OTP and before
-  // setting the cooldown — so the user can retry immediately if delivery fails
-  // and so we don't pretend success when nothing was sent.
-  const status = getWhatsappStatus();
-  if (!status.connected) {
-    req.log.warn({ phone }, "OTP request rejected: WhatsApp not connected");
+  // Set cooldown BEFORE the long wait so concurrent requests for the same
+  // phone (rapid double-clicks, retries during cold start, etc.) don't all
+  // pass the cooldown check and end up sending multiple OTPs once the socket
+  // finally reconnects. Cleared on any failure so the user can retry.
+  lastRequestAt.set(phone, Date.now());
+
+  // Wait for WhatsApp to (re)connect before failing. On Autoscale the process
+  // may have been killed while idle, so the very first OTP request after a
+  // cold start needs to wait for the socket to reconnect from persisted creds.
+  // 18s leaves headroom under typical 30s edge proxy timeouts for the
+  // subsequent WhatsApp send + DB insert.
+  const connected = await waitForConnection(18_000);
+  if (!connected) {
+    lastRequestAt.delete(phone);
+    req.log.warn({ phone }, "OTP request rejected: WhatsApp not connected after wait");
     res.status(503).json({
       error: "يوجد صيانة في إرسال رمز التحقق، لطفاً تواصل معنا.",
       reason: "whatsapp_disconnected",
@@ -70,11 +79,6 @@ router.post("/customer-auth/request-otp", async (req, res): Promise<void> => {
   const code = generateOtpCode();
   const expiresAt = new Date(Date.now() + OTP_TTL_SECONDS * 1000);
   const message = `رمز التحقق الخاص بك في متجرنا: ${code}\n\nصالح لمدة 5 دقائق. لا تشارك هذا الرمز مع أحد.`;
-
-  // Set cooldown BEFORE awaiting send so rapid double-clicks can't spam
-  // WhatsApp while the first send is in flight. Cleared on failure so the
-  // user can retry immediately if delivery actually fails.
-  lastRequestAt.set(phone, Date.now());
 
   try {
     await sendWhatsappMessage(phone, message);
