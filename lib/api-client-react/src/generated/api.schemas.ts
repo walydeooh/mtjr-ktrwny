@@ -153,6 +153,18 @@ export const OrderPaymentStatus = {
   failed: "failed",
 } as const;
 
+/**
+ * @nullable
+ */
+export type OrderPaymentMethod =
+  | (typeof OrderPaymentMethod)[keyof typeof OrderPaymentMethod]
+  | null;
+
+export const OrderPaymentMethod = {
+  paylink: "paylink",
+  bank_transfer: "bank_transfer",
+} as const;
+
 export type OrderSource = (typeof OrderSource)[keyof typeof OrderSource];
 
 export const OrderSource = {
@@ -182,6 +194,8 @@ export interface Order {
   paymentStatus: OrderPaymentStatus;
   /** @nullable */
   paymentLink?: string | null;
+  /** @nullable */
+  paymentMethod?: OrderPaymentMethod;
   /** @nullable */
   notes?: string | null;
   source: OrderSource;
@@ -270,8 +284,36 @@ export interface Customer {
   address?: string | null;
   totalOrders: number;
   totalSpent: number;
+  verified?: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface RequestOtpBody {
+  name: string;
+  phone: string;
+}
+
+export interface RequestOtpResponse {
+  ok: boolean;
+  expiresIn: number;
+}
+
+export interface VerifyOtpBody {
+  phone: string;
+  code: string;
+}
+
+export interface CustomerAuthResponse {
+  token: string;
+  customer: Customer;
+}
+
+export interface PaymentStatusResponse {
+  orderId: number;
+  status: string;
+  paymentStatus: string;
+  totalAmount: number;
 }
 
 export interface CreateCustomerBody {
@@ -506,3 +548,8 @@ export const GetSalesStatsPeriod = {
   "30d": "30d",
   "90d": "90d",
 } as const;
+
+export type PaymentCallbackParams = {
+  orderId?: string;
+  transactionNo?: string;
+};

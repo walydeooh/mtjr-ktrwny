@@ -34,7 +34,7 @@ export function AdminLayout({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!isLoading && !user) {
-      setLocation("/login");
+      setLocation("/admin-login");
     }
   }, [isLoading, user, setLocation]);
 
@@ -46,7 +46,7 @@ export function AdminLayout({ children }: { children: ReactNode }) {
     logoutMutation.mutate(undefined, {
       onSuccess: () => {
         localStorage.removeItem("token");
-        setLocation("/login");
+        setLocation("/admin-login");
       },
     });
   };

@@ -18,7 +18,7 @@ A full-stack Arabic e-commerce platform with WhatsApp AI integration, similar to
 - **Frontend**: React + Vite + Tailwind CSS + shadcn/ui
 - **Routing**: wouter
 - **State**: TanStack Query (via Orval generated hooks)
-- **WhatsApp**: whatsapp-web.js (requires Chrome/Chromium)
+- **WhatsApp**: Baileys (`@whiskeysockets/baileys`) — pure WebSocket, no browser needed
 - **AI**: OpenAI (for smart auto-replies)
 - **Payments**: Paylink integration
 
@@ -28,7 +28,9 @@ A full-stack Arabic e-commerce platform with WhatsApp AI integration, similar to
 - Product grid with RTL Arabic layout
 - Product types: digital (codes), physical (shipping), booking (calendar)
 - Shopping cart + checkout
-- Payment via Paylink
+- Customer login via WhatsApp OTP (`/login`) — required to checkout
+- Customer order history (`/my-orders`)
+- Payment via Paylink with success/failed callback pages (`/payment/success`, `/payment/failed`)
 
 ### Admin Dashboard (`/admin`)
 - Protected behind JWT auth (username: admin, password: admin123)
@@ -77,7 +79,25 @@ A full-stack Arabic e-commerce platform with WhatsApp AI integration, similar to
 - Username: `admin`
 - Password: `admin123`
 
+## Auth Architecture
+Two parallel authentication systems share the same JWT secret (`SESSION_SECRET`):
+1. **Admin auth** (`/api/auth/*`) — username/password for admin panel.
+   - JWT in `localStorage["token"]`. Used when path starts with `/admin`.
+   - Wrapped by `AuthProvider` only on admin pages.
+2. **Customer auth** (`/api/customer-auth/*`) — phone-only via WhatsApp OTP.
+   - JWT in `localStorage["customer_token"]`, customer object in `localStorage["customer_data"]`.
+   - 6-digit OTP sent via active Baileys WhatsApp session, stored in `customer_otps` table (5 min TTL).
+   - Wrapped by `CustomerAuthProvider` on storefront pages.
+   - Token kind discriminator (`kind: "customer"` vs admin's no-kind) prevents cross-use.
+
+The token getter in `main.tsx` switches based on `window.location.pathname`.
+
+## Payments
+- `POST /api/orders/:id/payment` creates a Paylink invoice with `callBackUrl` = `/api/payments/callback?orderId=X`.
+- `GET /api/payments/callback?orderId=X&transactionNo=Y` verifies the invoice via Paylink REST API, marks the order paid, delivers digital codes via WhatsApp, then 302-redirects to `/payment/success` or `/payment/failed`.
+- If Paylink keys are missing, the system falls back to a mock URL `/payment/success?orderId=X&mock=1`.
+
 ## Notes
-- WhatsApp requires Chrome/Chromium. In development it starts but degrades gracefully if Chrome isn't found.
+- WhatsApp uses Baileys; QR is generated and shown in `/admin/whatsapp`. Sessions persist in `.wa-session/`.
 - OpenAI key (`OPENAI_API_KEY`) needs to be set for AI auto-replies.
 - Paylink keys are configured via the Settings page in admin.

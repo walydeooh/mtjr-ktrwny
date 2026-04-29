@@ -8,6 +8,9 @@ import bookingsRouter from "./bookings";
 import whatsappRouter from "./whatsapp";
 import settingsRouter from "./settings";
 import statsRouter from "./stats";
+import customerAuthRouter from "./customer-auth";
+import myOrdersRouter from "./my-orders";
+import paymentsRouter from "./payments";
 
 const router: IRouter = Router();
 
@@ -20,5 +23,8 @@ router.use(bookingsRouter);
 router.use(whatsappRouter);
 router.use(settingsRouter);
 router.use(statsRouter);
+router.use(customerAuthRouter);
+router.use(myOrdersRouter);
+router.use(paymentsRouter);
 
 export default router;

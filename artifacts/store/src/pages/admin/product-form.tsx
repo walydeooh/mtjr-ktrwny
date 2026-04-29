@@ -106,9 +106,16 @@ export default function ProductForm() {
   }, [isEditing, product, form]);
 
   const onSubmit = (values: ProductFormValues) => {
+    const cleaned = {
+      ...values,
+      description: values.description?.trim() || null,
+      imageUrl: values.imageUrl?.trim() || null,
+      category: values.category?.trim() || null,
+      stock: values.type === "physical" ? (values.stock ?? 0) : null,
+    };
     if (isEditing) {
       updateProduct.mutate(
-        { id: productId, data: values },
+        { id: productId, data: cleaned as any },
         {
           onSuccess: () => {
             toast({ title: "تم التحديث", description: "تم تحديث المنتج بنجاح" });
@@ -121,7 +128,7 @@ export default function ProductForm() {
       );
     } else {
       createProduct.mutate(
-        { data: values },
+        { data: cleaned as any },
         {
           onSuccess: (data) => {
             toast({ title: "تمت الإضافة", description: "تم إضافة المنتج بنجاح" });

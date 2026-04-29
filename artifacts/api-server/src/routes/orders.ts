@@ -189,7 +189,11 @@ router.post("/orders/:id/payment", async (req, res): Promise<void> => {
 
   const amount = parseFloat(order.totalAmount as unknown as string);
   const paymentId = `order_${order.id}_${Date.now()}`;
-  let paymentUrl = `#payment-${paymentId}`;
+  const origin = process.env["REPLIT_DEV_DOMAIN"]
+    ? `https://${process.env["REPLIT_DEV_DOMAIN"]}`
+    : (process.env["REPLIT_DOMAINS"] ? `https://${process.env["REPLIT_DOMAINS"].split(",")[0]}` : "http://localhost");
+  let paymentUrl = `${origin}/payment/success?orderId=${order.id}&mock=1`;
+  let paylinkTransactionNo: string | null = null;
 
   if (settings?.paylinkApiKey && settings?.paylinkSecretKey) {
     try {
@@ -202,7 +206,7 @@ router.post("/orders/:id/payment", async (req, res): Promise<void> => {
         },
         body: JSON.stringify({
           amount,
-          callBackUrl: `${process.env["REPLIT_DEV_DOMAIN"] || "http://localhost"}/api/payments/callback`,
+          callBackUrl: `${origin}/api/payments/callback?orderId=${order.id}`,
           clientEmail: "customer@example.com",
           clientMobile: order.customerPhone,
           clientName: order.customerName,
@@ -213,10 +217,12 @@ router.post("/orders/:id/payment", async (req, res): Promise<void> => {
         }),
       });
       if (paylinkRes.ok) {
-        const data = await paylinkRes.json() as { paymentUrl?: string; transactionNo?: string };
-        if (data.paymentUrl) {
-          paymentUrl = data.paymentUrl;
-        }
+        const data = await paylinkRes.json() as { url?: string; paymentUrl?: string; transactionNo?: string; gatewayOrderRequestId?: string };
+        const url = data.url || data.paymentUrl;
+        if (url) paymentUrl = url;
+        paylinkTransactionNo = data.transactionNo || data.gatewayOrderRequestId || null;
+      } else {
+        req.log.warn({ status: paylinkRes.status }, "Paylink API returned non-OK");
       }
     } catch (e) {
       req.log.warn({ err: e }, "Paylink API error, using mock payment link");
@@ -226,6 +232,8 @@ router.post("/orders/:id/payment", async (req, res): Promise<void> => {
   await db.update(ordersTable).set({
     paymentId,
     paymentLink: paymentUrl,
+    paymentMethod: "paylink",
+    paylinkTransactionNo,
     paymentStatus: "pending",
     status: "payment_pending",
   }).where(eq(ordersTable.id, order.id));

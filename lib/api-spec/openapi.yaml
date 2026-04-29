@@ -27,6 +27,10 @@ tags:
     description: Store settings
   - name: stats
     description: Analytics and statistics
+  - name: customer-auth
+    description: Customer authentication (OTP via WhatsApp)
+  - name: my-orders
+    description: Customer-facing order history
 
 paths:
   /healthz:
@@ -770,6 +774,118 @@ paths:
                 items:
                   $ref: "#/components/schemas/SalesDataPoint"
 
+  # Customer Auth (OTP via WhatsApp)
+  /customer-auth/request-otp:
+    post:
+      operationId: requestCustomerOtp
+      tags: [customer-auth]
+      summary: Send OTP to customer phone via WhatsApp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RequestOtpBody"
+      responses:
+        "200":
+          description: OTP sent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RequestOtpResponse"
+        "400":
+          description: Invalid input
+
+  /customer-auth/verify-otp:
+    post:
+      operationId: verifyCustomerOtp
+      tags: [customer-auth]
+      summary: Verify OTP and return customer JWT token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VerifyOtpBody"
+      responses:
+        "200":
+          description: Token returned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerAuthResponse"
+        "401":
+          description: Invalid or expired OTP
+
+  /customer-auth/me:
+    get:
+      operationId: getCustomerMe
+      tags: [customer-auth]
+      summary: Get current logged-in customer
+      responses:
+        "200":
+          description: Current customer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Customer"
+        "401":
+          description: Unauthorized
+
+  /my-orders:
+    get:
+      operationId: listMyOrders
+      tags: [my-orders]
+      summary: List orders for current logged-in customer
+      responses:
+        "200":
+          description: Orders
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Order"
+        "401":
+          description: Unauthorized
+
+  /payments/callback:
+    get:
+      operationId: paymentCallback
+      tags: [payments]
+      summary: Paylink redirect callback (verifies & redirects to success/failed)
+      parameters:
+        - name: orderId
+          in: query
+          schema:
+            type: string
+        - name: transactionNo
+          in: query
+          schema:
+            type: string
+      responses:
+        "302":
+          description: Redirect
+
+  /payments/{orderId}/status:
+    get:
+      operationId: getPaymentStatus
+      tags: [payments]
+      summary: Public payment status check by order id (used by success page)
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Payment status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentStatusResponse"
+
   /stats/top-products:
     get:
       operationId: getTopProducts
@@ -977,6 +1093,9 @@ components:
           enum: [unpaid, pending, paid, failed]
         paymentLink:
           type: ["string", "null"]
+        paymentMethod:
+          type: ["string", "null"]
+          enum: [paylink, bank_transfer, null]
         notes:
           type: ["string", "null"]
         source:
@@ -1094,11 +1213,63 @@ components:
           type: integer
         totalSpent:
           type: number
+        verified:
+          type: boolean
         createdAt:
           type: string
         updatedAt:
           type: string
       required: [id, name, phone, totalOrders, totalSpent, createdAt, updatedAt]
+
+    RequestOtpBody:
+      type: object
+      properties:
+        name:
+          type: string
+        phone:
+          type: string
+      required: [name, phone]
+
+    RequestOtpResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        expiresIn:
+          type: integer
+      required: [ok, expiresIn]
+
+    VerifyOtpBody:
+      type: object
+      properties:
+        phone:
+          type: string
+        code:
+          type: string
+      required: [phone, code]
+
+    CustomerAuthResponse:
+      type: object
+      properties:
+        token:
+          type: string
+        customer:
+          $ref: "#/components/schemas/Customer"
+      required: [token, customer]
+
+    PaymentStatusResponse:
+      type: object
+      properties:
+        orderId:
+          type: integer
+        status:
+          type: string
+        paymentStatus:
+          type: string
+        totalAmount:
+          type: number
+      required: [orderId, status, paymentStatus, totalAmount]
+
 
     CreateCustomerBody:
       type: object

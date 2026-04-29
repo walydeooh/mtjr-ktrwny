@@ -240,6 +240,13 @@ export const ListOrdersResponseItem = zod.object({
   ]),
   paymentStatus: zod.enum(["unpaid", "pending", "paid", "failed"]),
   paymentLink: zod.string().nullish(),
+  paymentMethod: zod
+    .union([
+      zod.literal("paylink"),
+      zod.literal("bank_transfer"),
+      zod.literal(null),
+    ])
+    .nullish(),
   notes: zod.string().nullish(),
   source: zod.enum(["web", "whatsapp", "admin"]),
   createdAt: zod.string(),
@@ -297,6 +304,13 @@ export const GetOrderResponse = zod.object({
   ]),
   paymentStatus: zod.enum(["unpaid", "pending", "paid", "failed"]),
   paymentLink: zod.string().nullish(),
+  paymentMethod: zod
+    .union([
+      zod.literal("paylink"),
+      zod.literal("bank_transfer"),
+      zod.literal(null),
+    ])
+    .nullish(),
   notes: zod.string().nullish(),
   source: zod.enum(["web", "whatsapp", "admin"]),
   createdAt: zod.string(),
@@ -353,6 +367,13 @@ export const UpdateOrderResponse = zod.object({
   ]),
   paymentStatus: zod.enum(["unpaid", "pending", "paid", "failed"]),
   paymentLink: zod.string().nullish(),
+  paymentMethod: zod
+    .union([
+      zod.literal("paylink"),
+      zod.literal("bank_transfer"),
+      zod.literal(null),
+    ])
+    .nullish(),
   notes: zod.string().nullish(),
   source: zod.enum(["web", "whatsapp", "admin"]),
   createdAt: zod.string(),
@@ -402,6 +423,7 @@ export const ListCustomersResponseItem = zod.object({
   address: zod.string().nullish(),
   totalOrders: zod.number(),
   totalSpent: zod.number(),
+  verified: zod.boolean().optional(),
   createdAt: zod.string(),
   updatedAt: zod.string(),
 });
@@ -432,6 +454,7 @@ export const GetCustomerResponse = zod.object({
   address: zod.string().nullish(),
   totalOrders: zod.number(),
   totalSpent: zod.number(),
+  verified: zod.boolean().optional(),
   createdAt: zod.string(),
   updatedAt: zod.string(),
 });
@@ -457,6 +480,7 @@ export const UpdateCustomerResponse = zod.object({
   address: zod.string().nullish(),
   totalOrders: zod.number(),
   totalSpent: zod.number(),
+  verified: zod.boolean().optional(),
   createdAt: zod.string(),
   updatedAt: zod.string(),
 });
@@ -698,6 +722,125 @@ export const GetSalesStatsResponseItem = zod.object({
   orders: zod.number(),
 });
 export const GetSalesStatsResponse = zod.array(GetSalesStatsResponseItem);
+
+/**
+ * @summary Send OTP to customer phone via WhatsApp
+ */
+export const RequestCustomerOtpBody = zod.object({
+  name: zod.string(),
+  phone: zod.string(),
+});
+
+export const RequestCustomerOtpResponse = zod.object({
+  ok: zod.boolean(),
+  expiresIn: zod.number(),
+});
+
+/**
+ * @summary Verify OTP and return customer JWT token
+ */
+export const VerifyCustomerOtpBody = zod.object({
+  phone: zod.string(),
+  code: zod.string(),
+});
+
+export const VerifyCustomerOtpResponse = zod.object({
+  token: zod.string(),
+  customer: zod.object({
+    id: zod.number(),
+    name: zod.string(),
+    phone: zod.string(),
+    email: zod.string().nullish(),
+    address: zod.string().nullish(),
+    totalOrders: zod.number(),
+    totalSpent: zod.number(),
+    verified: zod.boolean().optional(),
+    createdAt: zod.string(),
+    updatedAt: zod.string(),
+  }),
+});
+
+/**
+ * @summary Get current logged-in customer
+ */
+export const GetCustomerMeResponse = zod.object({
+  id: zod.number(),
+  name: zod.string(),
+  phone: zod.string(),
+  email: zod.string().nullish(),
+  address: zod.string().nullish(),
+  totalOrders: zod.number(),
+  totalSpent: zod.number(),
+  verified: zod.boolean().optional(),
+  createdAt: zod.string(),
+  updatedAt: zod.string(),
+});
+
+/**
+ * @summary List orders for current logged-in customer
+ */
+export const ListMyOrdersResponseItem = zod.object({
+  id: zod.number(),
+  customerId: zod.number().nullish(),
+  customerName: zod.string(),
+  customerPhone: zod.string(),
+  items: zod.array(
+    zod.object({
+      id: zod.number(),
+      productId: zod.number(),
+      productName: zod.string(),
+      quantity: zod.number(),
+      unitPrice: zod.number(),
+      totalPrice: zod.number(),
+    }),
+  ),
+  totalAmount: zod.number(),
+  status: zod.enum([
+    "pending",
+    "payment_pending",
+    "paid",
+    "processing",
+    "shipped",
+    "delivered",
+    "cancelled",
+  ]),
+  paymentStatus: zod.enum(["unpaid", "pending", "paid", "failed"]),
+  paymentLink: zod.string().nullish(),
+  paymentMethod: zod
+    .union([
+      zod.literal("paylink"),
+      zod.literal("bank_transfer"),
+      zod.literal(null),
+    ])
+    .nullish(),
+  notes: zod.string().nullish(),
+  source: zod.enum(["web", "whatsapp", "admin"]),
+  createdAt: zod.string(),
+  updatedAt: zod.string(),
+});
+export const ListMyOrdersResponse = zod.array(ListMyOrdersResponseItem);
+
+/**
+ * @summary Paylink redirect callback (verifies & redirects to success/failed)
+ */
+export const PaymentCallbackQueryParams = zod.object({
+  orderId: zod.coerce.string().optional(),
+  transactionNo: zod.coerce.string().optional(),
+});
+
+/**
+ * @summary Public payment status check by order id (used by success page)
+ */
+export const GetPaymentStatusParams = zod.object({
+  orderId: zod.coerce.number(),
+});
+
+export const GetPaymentStatusResponse = zod.object({
+  orderId: zod.number(),
+  status: zod.string(),
+  paymentStatus: zod.string(),
+  totalAmount: zod.number(),
+});
 
 /**
  * @summary Get top selling products

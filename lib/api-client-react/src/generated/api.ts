@@ -29,6 +29,7 @@ import type {
   CreateOrderBody,
   CreateProductBody,
   Customer,
+  CustomerAuthResponse,
   DigitalCode,
   GetProductAvailabilityParams,
   GetSalesStatsParams,
@@ -40,9 +41,13 @@ import type {
   ListWhatsappMessagesParams,
   LoginBody,
   Order,
+  PaymentCallbackParams,
   PaymentLink,
+  PaymentStatusResponse,
   PaymentVerification,
   Product,
+  RequestOtpBody,
+  RequestOtpResponse,
   SalesDataPoint,
   SendMessageBody,
   StatsOverview,
@@ -55,6 +60,7 @@ import type {
   UpdateOrderBody,
   UpdateProductBody,
   UpdateSettingsBody,
+  VerifyOtpBody,
   VerifyPaymentBody,
   WhatsappMessage,
   WhatsappQr,
@@ -3403,6 +3409,508 @@ export function useGetSalesStats<
   },
 ): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetSalesStatsQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Send OTP to customer phone via WhatsApp
+ */
+export const getRequestCustomerOtpUrl = () => {
+  return `/api/customer-auth/request-otp`;
+};
+
+export const requestCustomerOtp = async (
+  requestOtpBody: RequestOtpBody,
+  options?: RequestInit,
+): Promise<RequestOtpResponse> => {
+  return customFetch<RequestOtpResponse>(getRequestCustomerOtpUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(requestOtpBody),
+  });
+};
+
+export const getRequestCustomerOtpMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof requestCustomerOtp>>,
+    TError,
+    { data: BodyType<RequestOtpBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof requestCustomerOtp>>,
+  TError,
+  { data: BodyType<RequestOtpBody> },
+  TContext
+> => {
+  const mutationKey = ["requestCustomerOtp"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof requestCustomerOtp>>,
+    { data: BodyType<RequestOtpBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return requestCustomerOtp(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RequestCustomerOtpMutationResult = NonNullable<
+  Awaited<ReturnType<typeof requestCustomerOtp>>
+>;
+export type RequestCustomerOtpMutationBody = BodyType<RequestOtpBody>;
+export type RequestCustomerOtpMutationError = ErrorType<void>;
+
+/**
+ * @summary Send OTP to customer phone via WhatsApp
+ */
+export const useRequestCustomerOtp = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof requestCustomerOtp>>,
+    TError,
+    { data: BodyType<RequestOtpBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof requestCustomerOtp>>,
+  TError,
+  { data: BodyType<RequestOtpBody> },
+  TContext
+> => {
+  return useMutation(getRequestCustomerOtpMutationOptions(options));
+};
+
+/**
+ * @summary Verify OTP and return customer JWT token
+ */
+export const getVerifyCustomerOtpUrl = () => {
+  return `/api/customer-auth/verify-otp`;
+};
+
+export const verifyCustomerOtp = async (
+  verifyOtpBody: VerifyOtpBody,
+  options?: RequestInit,
+): Promise<CustomerAuthResponse> => {
+  return customFetch<CustomerAuthResponse>(getVerifyCustomerOtpUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(verifyOtpBody),
+  });
+};
+
+export const getVerifyCustomerOtpMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof verifyCustomerOtp>>,
+    TError,
+    { data: BodyType<VerifyOtpBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof verifyCustomerOtp>>,
+  TError,
+  { data: BodyType<VerifyOtpBody> },
+  TContext
+> => {
+  const mutationKey = ["verifyCustomerOtp"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof verifyCustomerOtp>>,
+    { data: BodyType<VerifyOtpBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return verifyCustomerOtp(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type VerifyCustomerOtpMutationResult = NonNullable<
+  Awaited<ReturnType<typeof verifyCustomerOtp>>
+>;
+export type VerifyCustomerOtpMutationBody = BodyType<VerifyOtpBody>;
+export type VerifyCustomerOtpMutationError = ErrorType<void>;
+
+/**
+ * @summary Verify OTP and return customer JWT token
+ */
+export const useVerifyCustomerOtp = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof verifyCustomerOtp>>,
+    TError,
+    { data: BodyType<VerifyOtpBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof verifyCustomerOtp>>,
+  TError,
+  { data: BodyType<VerifyOtpBody> },
+  TContext
+> => {
+  return useMutation(getVerifyCustomerOtpMutationOptions(options));
+};
+
+/**
+ * @summary Get current logged-in customer
+ */
+export const getGetCustomerMeUrl = () => {
+  return `/api/customer-auth/me`;
+};
+
+export const getCustomerMe = async (
+  options?: RequestInit,
+): Promise<Customer> => {
+  return customFetch<Customer>(getGetCustomerMeUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetCustomerMeQueryKey = () => {
+  return [`/api/customer-auth/me`] as const;
+};
+
+export const getGetCustomerMeQueryOptions = <
+  TData = Awaited<ReturnType<typeof getCustomerMe>>,
+  TError = ErrorType<void>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getCustomerMe>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetCustomerMeQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getCustomerMe>>> = ({
+    signal,
+  }) => getCustomerMe({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getCustomerMe>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetCustomerMeQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getCustomerMe>>
+>;
+export type GetCustomerMeQueryError = ErrorType<void>;
+
+/**
+ * @summary Get current logged-in customer
+ */
+
+export function useGetCustomerMe<
+  TData = Awaited<ReturnType<typeof getCustomerMe>>,
+  TError = ErrorType<void>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getCustomerMe>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetCustomerMeQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary List orders for current logged-in customer
+ */
+export const getListMyOrdersUrl = () => {
+  return `/api/my-orders`;
+};
+
+export const listMyOrders = async (options?: RequestInit): Promise<Order[]> => {
+  return customFetch<Order[]>(getListMyOrdersUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListMyOrdersQueryKey = () => {
+  return [`/api/my-orders`] as const;
+};
+
+export const getListMyOrdersQueryOptions = <
+  TData = Awaited<ReturnType<typeof listMyOrders>>,
+  TError = ErrorType<void>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listMyOrders>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListMyOrdersQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listMyOrders>>> = ({
+    signal,
+  }) => listMyOrders({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listMyOrders>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListMyOrdersQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listMyOrders>>
+>;
+export type ListMyOrdersQueryError = ErrorType<void>;
+
+/**
+ * @summary List orders for current logged-in customer
+ */
+
+export function useListMyOrders<
+  TData = Awaited<ReturnType<typeof listMyOrders>>,
+  TError = ErrorType<void>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listMyOrders>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListMyOrdersQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Paylink redirect callback (verifies & redirects to success/failed)
+ */
+export const getPaymentCallbackUrl = (params?: PaymentCallbackParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/payments/callback?${stringifiedParams}`
+    : `/api/payments/callback`;
+};
+
+export const paymentCallback = async (
+  params?: PaymentCallbackParams,
+  options?: RequestInit,
+): Promise<unknown> => {
+  return customFetch<unknown>(getPaymentCallbackUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getPaymentCallbackQueryKey = (params?: PaymentCallbackParams) => {
+  return [`/api/payments/callback`, ...(params ? [params] : [])] as const;
+};
+
+export const getPaymentCallbackQueryOptions = <
+  TData = Awaited<ReturnType<typeof paymentCallback>>,
+  TError = ErrorType<void>,
+>(
+  params?: PaymentCallbackParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof paymentCallback>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getPaymentCallbackQueryKey(params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof paymentCallback>>> = ({
+    signal,
+  }) => paymentCallback(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof paymentCallback>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type PaymentCallbackQueryResult = NonNullable<
+  Awaited<ReturnType<typeof paymentCallback>>
+>;
+export type PaymentCallbackQueryError = ErrorType<void>;
+
+/**
+ * @summary Paylink redirect callback (verifies & redirects to success/failed)
+ */
+
+export function usePaymentCallback<
+  TData = Awaited<ReturnType<typeof paymentCallback>>,
+  TError = ErrorType<void>,
+>(
+  params?: PaymentCallbackParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof paymentCallback>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getPaymentCallbackQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Public payment status check by order id (used by success page)
+ */
+export const getGetPaymentStatusUrl = (orderId: number) => {
+  return `/api/payments/${orderId}/status`;
+};
+
+export const getPaymentStatus = async (
+  orderId: number,
+  options?: RequestInit,
+): Promise<PaymentStatusResponse> => {
+  return customFetch<PaymentStatusResponse>(getGetPaymentStatusUrl(orderId), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetPaymentStatusQueryKey = (orderId: number) => {
+  return [`/api/payments/${orderId}/status`] as const;
+};
+
+export const getGetPaymentStatusQueryOptions = <
+  TData = Awaited<ReturnType<typeof getPaymentStatus>>,
+  TError = ErrorType<unknown>,
+>(
+  orderId: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getPaymentStatus>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetPaymentStatusQueryKey(orderId);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getPaymentStatus>>
+  > = ({ signal }) => getPaymentStatus(orderId, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!orderId,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getPaymentStatus>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetPaymentStatusQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getPaymentStatus>>
+>;
+export type GetPaymentStatusQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Public payment status check by order id (used by success page)
+ */
+
+export function useGetPaymentStatus<
+  TData = Awaited<ReturnType<typeof getPaymentStatus>>,
+  TError = ErrorType<unknown>,
+>(
+  orderId: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getPaymentStatus>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetPaymentStatusQueryOptions(orderId, options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

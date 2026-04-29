@@ -1,10 +1,11 @@
-import { Switch, Route, Router as WouterRouter } from "wouter";
+import { Switch, Route } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 import { AuthProvider } from "@/hooks/use-auth";
 import { CartProvider } from "@/hooks/use-cart";
+import { CustomerAuthProvider } from "@/hooks/use-customer-auth";
 import { StoreLayout } from "@/components/layout/store-layout";
 import { AdminLayout } from "@/components/layout/admin-layout";
 
@@ -12,7 +13,11 @@ import Home from "@/pages/home";
 import ProductDetail from "@/pages/product";
 import Cart from "@/pages/cart";
 import Checkout from "@/pages/checkout";
-import Login from "@/pages/admin/login";
+import CustomerLogin from "@/pages/login";
+import MyOrders from "@/pages/my-orders";
+import PaymentSuccess from "@/pages/payment-success";
+import PaymentFailed from "@/pages/payment-failed";
+import AdminLogin from "@/pages/admin/login";
 import Dashboard from "@/pages/admin/dashboard";
 import Products from "@/pages/admin/products";
 import ProductForm from "@/pages/admin/product-form";
@@ -22,6 +27,8 @@ import Customers from "@/pages/admin/customers";
 import Bookings from "@/pages/admin/bookings";
 import Whatsapp from "@/pages/admin/whatsapp";
 import Settings from "@/pages/admin/settings";
+import { useLocation } from "wouter";
+import { ReactNode } from "react";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -32,24 +39,38 @@ const queryClient = new QueryClient({
   },
 });
 
-function StoreRoutes() {
+function ShellSwitcher({ children }: { children: ReactNode }) {
+  const [location] = useLocation();
+  const isAdmin = location.startsWith("/admin") && location !== "/admin-login";
+  const isAdminLogin = location === "/admin-login";
+
+  if (isAdminLogin) {
+    return <AuthProvider>{children}</AuthProvider>;
+  }
+
+  if (isAdmin) {
+    return (
+      <AuthProvider>
+        <AdminLayout>{children}</AdminLayout>
+      </AuthProvider>
+    );
+  }
+
   return (
-    <StoreLayout>
-      <Switch>
-        <Route path="/" component={Home} />
-        <Route path="/product/:id" component={ProductDetail} />
-        <Route path="/cart" component={Cart} />
-        <Route path="/checkout" component={Checkout} />
-        <Route component={NotFound} />
-      </Switch>
-    </StoreLayout>
+    <CustomerAuthProvider>
+      <StoreLayout>{children}</StoreLayout>
+    </CustomerAuthProvider>
   );
 }
 
-function AdminRoutes() {
+function Router() {
   return (
-    <AdminLayout>
+    <ShellSwitcher>
       <Switch>
+        {/* Admin login */}
+        <Route path="/admin-login" component={AdminLogin} />
+
+        {/* Admin routes */}
         <Route path="/admin" component={Dashboard} />
         <Route path="/admin/products" component={Products} />
         <Route path="/admin/products/new" component={ProductForm} />
@@ -60,20 +81,20 @@ function AdminRoutes() {
         <Route path="/admin/bookings" component={Bookings} />
         <Route path="/admin/whatsapp" component={Whatsapp} />
         <Route path="/admin/settings" component={Settings} />
+
+        {/* Storefront routes */}
+        <Route path="/" component={Home} />
+        <Route path="/product/:id" component={ProductDetail} />
+        <Route path="/cart" component={Cart} />
+        <Route path="/checkout" component={Checkout} />
+        <Route path="/login" component={CustomerLogin} />
+        <Route path="/my-orders" component={MyOrders} />
+        <Route path="/payment/success" component={PaymentSuccess} />
+        <Route path="/payment/failed" component={PaymentFailed} />
+
         <Route component={NotFound} />
       </Switch>
-    </AdminLayout>
-  );
-}
-
-function Router() {
-  return (
-    <Switch>
-      <Route path="/login" component={Login} />
-      <Route path="/admin" component={AdminRoutes} />
-      <Route path="/admin/:rest*" component={AdminRoutes} />
-      <Route path="/*" component={StoreRoutes} />
-    </Switch>
+    </ShellSwitcher>
   );
 }
 
@@ -81,14 +102,10 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <AuthProvider>
-          <CartProvider>
-            <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-              <Router />
-            </WouterRouter>
-          </CartProvider>
-        </AuthProvider>
-        <Toaster />
+        <CartProvider>
+          <Router />
+          <Toaster />
+        </CartProvider>
       </TooltipProvider>
     </QueryClientProvider>
   );
