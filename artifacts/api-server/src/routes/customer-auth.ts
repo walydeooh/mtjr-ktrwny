@@ -61,7 +61,7 @@ router.post("/customer-auth/request-otp", async (req, res): Promise<void> => {
   if (!status.connected) {
     req.log.warn({ phone }, "OTP request rejected: WhatsApp not connected");
     res.status(503).json({
-      error: "خدمة الواتساب غير متصلة حالياً. يرجى المحاولة بعد قليل أو التواصل مع المتجر.",
+      error: "يوجد صيانة في إرسال رمز التحقق، لطفاً تواصل معنا.",
       reason: "whatsapp_disconnected",
     });
     return;
@@ -82,7 +82,7 @@ router.post("/customer-auth/request-otp", async (req, res): Promise<void> => {
     lastRequestAt.delete(phone);
     req.log.warn({ err: e, phone }, "Failed to send OTP via WhatsApp");
     res.status(503).json({
-      error: "تعذّر إرسال رمز التحقق عبر الواتساب. تأكد من رقم الهاتف وحاول مرة أخرى.",
+      error: "يوجد صيانة في إرسال رمز التحقق، لطفاً تواصل معنا.",
       reason: "whatsapp_send_failed",
     });
     return;
