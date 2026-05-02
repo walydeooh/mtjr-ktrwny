@@ -1,0 +1,17 @@
+[phases.setup]
+nixPkgs = ["nodejs_22"]
+
+[phases.install]
+cmds = [
+  "npm install -g pnpm@9",
+  "pnpm install --frozen-lockfile"
+]
+
+[phases.build]
+cmds = [
+  "BASE_PATH=/ PORT=3000 NODE_ENV=production pnpm --filter @workspace/store run build",
+  "pnpm --filter @workspace/api-server run build"
+]
+
+[start]
+cmd = "node scripts/start-production.mjs"
