@@ -5,6 +5,7 @@ import { promises as dns } from "node:dns";
 import net from "node:net";
 import { logger } from "../lib/logger";
 import { requireAuth } from "../middlewares/auth";
+import { db, productsTable } from "@workspace/db";
 
 const router: IRouter = Router();
 
@@ -312,6 +313,290 @@ router.post("/products/import-from-url", requireAuth, async (req, res): Promise<
     imageUrl: image || null,
     price: price ?? null,
     sourceUrl: url,
+  });
+});
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   POST /products/import-from-site
+   Scrape an entire store, extract all visible products with AI, save as hidden.
+───────────────────────────────────────────────────────────────────────────── */
+const BulkImportBody = z.object({
+  url: z.string().url(),
+  maxProducts: z.coerce.number().int().min(1).max(50).default(20),
+});
+
+interface AIProduct {
+  name: string;
+  description?: string | null;
+  price?: number | null;
+  imageUrl?: string | null;
+}
+
+function formatImportedProduct(p: typeof productsTable.$inferSelect) {
+  return { ...p, price: parseFloat(p.price as unknown as string), createdAt: p.createdAt.toISOString(), updatedAt: p.updatedAt.toISOString() };
+}
+
+router.post("/products/import-from-site", requireAuth, async (req, res): Promise<void> => {
+  const parsed = BulkImportBody.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: "رابط غير صالح" }); return; }
+
+  const { url, maxProducts } = parsed.data;
+
+  // SSRF guard
+  let parsedUrl: URL;
+  try { parsedUrl = new URL(url); } catch { res.status(400).json({ error: "رابط غير صالح" }); return; }
+  if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
+    res.status(400).json({ error: "البروتوكول غير مدعوم" }); return;
+  }
+  try { await assertPublicHost(parsedUrl.hostname); } catch {
+    res.status(400).json({ error: "النطاق غير مسموح" }); return;
+  }
+
+  // ── 1. Fetch page content ──────────────────────────────────────────────────
+  let html = "";
+  const capturedImages: { src: string; alt: string }[] = [];
+
+  // Try Puppeteer first (handles JS-rendered stores like Salla/Zid)
+  let puppeteerOk = false;
+  try {
+    const puppeteer = (await import("puppeteer")).default;
+    const browser = await puppeteer.launch({
+      headless: true,
+      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-gpu", "--disable-dev-shm-usage"],
+      timeout: 30_000,
+    });
+    try {
+      const page = await browser.newPage();
+      await page.setUserAgent("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120 Safari/537.36");
+      await page.setViewport({ width: 1280, height: 900 });
+      await page.goto(url, { waitUntil: "domcontentloaded", timeout: 22_000 });
+      // scroll to trigger lazy loading
+      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+      await new Promise<void>(r => setTimeout(r, 2000));
+      html = await page.content();
+      // capture rendered img src values
+      const imgs = await page.$$eval("img[src]", (els: Element[]) =>
+        (els as HTMLImageElement[]).map(e => ({ src: e.src || "", alt: e.alt || "" })).filter(i => i.src.startsWith("http"))
+      );
+      capturedImages.push(...imgs);
+      puppeteerOk = true;
+    } finally {
+      await browser.close();
+    }
+  } catch (puppeteerErr) {
+    logger.warn({ err: (puppeteerErr as Error).message, url }, "bulk-import: Puppeteer unavailable, falling back to fetch");
+  }
+
+  if (!puppeteerOk) {
+    try {
+      const r = await fetch(url, {
+        headers: { "User-Agent": "Mozilla/5.0 (compatible; MatjariBot/1.0)", Accept: "text/html" },
+        signal: AbortSignal.timeout(15_000),
+        redirect: "manual",
+      });
+      if (r.status >= 300 && r.status < 400) { res.status(400).json({ error: "إعادة التوجيه غير مدعومة" }); return; }
+      if (!r.ok) { res.status(502).json({ error: `فشل تحميل الصفحة (${r.status})` }); return; }
+      html = await r.text();
+    } catch {
+      res.status(502).json({ error: "تعذّر الوصول إلى الموقع" }); return;
+    }
+  }
+
+  // ── 2. JSON-LD structured data extraction (most reliable) ─────────────────
+  function collectAllProducts(node: unknown, out: Record<string, unknown>[]): void {
+    if (!node) return;
+    if (Array.isArray(node)) { for (const n of node) collectAllProducts(n, out); return; }
+    if (typeof node !== "object") return;
+    const obj = node as Record<string, unknown>;
+    const t = obj["@type"];
+    const types = Array.isArray(t) ? t : [t];
+    if (types.some(x => typeof x === "string" && x.toLowerCase() === "product")) out.push(obj);
+    if (obj["@graph"]) collectAllProducts(obj["@graph"], out);
+  }
+
+  const ldProducts: AIProduct[] = [];
+  const ldRe2 = /<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+  for (const m of html.matchAll(ldRe2)) {
+    try {
+      const data = JSON.parse((m[1] || "").trim());
+      const nodes: Record<string, unknown>[] = [];
+      collectAllProducts(data, nodes);
+      for (const p of nodes) {
+        if (typeof p["name"] !== "string" || !p["name"]) continue;
+        let img: string | null = null;
+        const imgVal = p["image"];
+        if (typeof imgVal === "string") img = imgVal;
+        else if (Array.isArray(imgVal) && typeof imgVal[0] === "string") img = imgVal[0];
+        else if (imgVal && typeof imgVal === "object") img = (imgVal as Record<string, unknown>)["url"] as string ?? null;
+        const offer = priceFromOffer(p["offers"]);
+        ldProducts.push({ name: p["name"] as string, description: (p["description"] as string) ?? null, price: offer?.price ?? null, imageUrl: img });
+      }
+    } catch { /* bad JSON-LD */ }
+  }
+
+  // ── 2b. Microdata extraction (itemscope / itemprop) ───────────────────────
+  const microdataProducts: AIProduct[] = [];
+  // Find all elements with itemtype containing "schema.org/Product"
+  const microdataRe = /itemtype=["'][^"']*schema\.org\/Product["'][^>]*>([\s\S]*?)(?=itemtype=["'][^"']*schema\.org\/Product["']|$)/gi;
+  for (const m of html.matchAll(microdataRe)) {
+    const block = m[0] || "";
+    const nameM = block.match(/itemprop=["']name["'][^>]*content=["']([^"']+)["']|itemprop=["']name["'][^>]*>([^<]+)</i);
+    const priceM = block.match(/itemprop=["']price["'][^>]*content=["']([0-9.,]+)["']|itemprop=["']price["'][^>]*>([0-9.,]+)/i);
+    const imgM = block.match(/itemprop=["']image["'][^>]*(?:content|src)=["']([^"']+)["']/i);
+    const descM = block.match(/itemprop=["']description["'][^>]*content=["']([^"']+)["']|itemprop=["']description["'][^>]*>([^<]+)</i);
+    const name = (nameM?.[1] || nameM?.[2] || "").trim();
+    if (!name) continue;
+    const priceRaw = (priceM?.[1] || priceM?.[2] || "").replace(/,/g, "").trim();
+    const price = priceRaw ? parseFloat(priceRaw) : null;
+    microdataProducts.push({
+      name,
+      description: (descM?.[1] || descM?.[2] || null),
+      price: price && !isNaN(price) ? price : null,
+      imageUrl: imgM?.[1] || null,
+    });
+  }
+
+  // ── 2c. Salla / Zid platform detection & API fallback ────────────────────
+  // Salla stores embed all products as JS variables that follow predictable patterns.
+  const sallaProductsRe = /"products"\s*:\s*(\[[\s\S]*?\])\s*[,}]/;
+  const sallaMatch = html.match(sallaProductsRe);
+  const platformProducts: AIProduct[] = [];
+  if (sallaMatch) {
+    try {
+      const arr = JSON.parse(sallaMatch[1]) as Record<string, unknown>[];
+      for (const p of arr) {
+        const name = String(p["name"] || p["title"] || "").trim();
+        if (!name) continue;
+        const priceRaw = p["price"] ?? p["regular_price"] ?? p["sale_price"];
+        let price: number | null = null;
+        if (typeof priceRaw === "number") price = priceRaw;
+        else if (typeof priceRaw === "string") price = parseFloat(priceRaw) || null;
+        else if (priceRaw && typeof priceRaw === "object") {
+          const amount = (priceRaw as Record<string, unknown>)["amount"];
+          price = typeof amount === "number" ? amount : (typeof amount === "string" ? parseFloat(amount) : null);
+        }
+        const imgRaw = p["thumbnail"] ?? p["image"] ?? p["main_image"];
+        const imageUrl = typeof imgRaw === "string" ? imgRaw :
+          (imgRaw && typeof imgRaw === "object" ? String((imgRaw as Record<string, unknown>)["url"] ?? "") : null);
+        platformProducts.push({ name, description: String(p["description"] || "").trim() || null, price, imageUrl: imageUrl || null });
+      }
+    } catch { /* ignore */ }
+  }
+
+  // ── 3. AI extraction ───────────────────────────────────────────────────────
+  let aiProducts: AIProduct[] = [];
+  const cleanText = html
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 14_000);
+
+  const aiSystemPrompt = `أنت أداة استخراج بيانات من صفحات المتاجر الإلكترونية.
+استخرج كل المنتجات الظاهرة في الصفحة وأعد JSON فقط بهذا الشكل:
+{"products":[{"name":"اسم المنتج","description":"الوصف الكامل للمنتج","price":99.99,"imageUrl":"https://..."}]}
+- price: رقم بدون عملة (null إذا غير موجود)
+- imageUrl: الرابط الكامل للصورة أو null (لا تخترع روابط)
+- لا تضف منتجات وهمية - استخرج الحقيقية فقط
+- إذا كانت الصفحة تحتوي منتجات متعددة استخرج كلها`;
+
+  const aiUserMsg = `URL: ${url}\n\nمحتوى الصفحة:\n${cleanText}`;
+
+  if (process.env["OPENAI_API_KEY"]) {
+    try {
+      const openai = new OpenAI({ apiKey: process.env["OPENAI_API_KEY"] });
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        response_format: { type: "json_object" },
+        messages: [{ role: "system", content: aiSystemPrompt }, { role: "user", content: aiUserMsg }],
+        max_tokens: 4000,
+      });
+      const raw = completion.choices[0]?.message?.content || "{}";
+      const j = JSON.parse(raw) as { products?: AIProduct[] };
+      if (Array.isArray(j.products)) aiProducts = j.products;
+    } catch (e) {
+      logger.warn({ err: (e as Error).message, url }, "bulk-import: OpenAI extraction failed");
+    }
+  } else if (process.env["ANTHROPIC_API_KEY"]) {
+    try {
+      const Anthropic = (await import("@anthropic-ai/sdk")).default;
+      const client = new Anthropic({ apiKey: process.env["ANTHROPIC_API_KEY"] });
+      const msg = await client.messages.create({
+        model: "claude-haiku-4-5",
+        max_tokens: 4000,
+        messages: [{ role: "user", content: `${aiSystemPrompt}\n\n${aiUserMsg}` }],
+      });
+      const txt = msg.content[0]?.type === "text" ? msg.content[0].text : "{}";
+      const match = txt.match(/\{[\s\S]*\}/);
+      if (match) {
+        const j = JSON.parse(match[0]) as { products?: AIProduct[] };
+        if (Array.isArray(j.products)) aiProducts = j.products;
+      }
+    } catch (e) {
+      logger.warn({ err: (e as Error).message, url }, "bulk-import: Anthropic extraction failed");
+    }
+  }
+
+  // ── 4. Merge: JSON-LD > Microdata > Platform > AI ────────────────────────
+  const merged = new Map<string, AIProduct>();
+  for (const p of [...ldProducts, ...microdataProducts, ...platformProducts, ...aiProducts]) {
+    if (!p.name?.trim()) continue;
+    const key = p.name.trim().toLowerCase();
+    if (!merged.has(key)) {
+      merged.set(key, p);
+    } else {
+      const ex = merged.get(key)!;
+      merged.set(key, {
+        name: ex.name,
+        description: ex.description || p.description,
+        price: ex.price ?? p.price,
+        imageUrl: ex.imageUrl || p.imageUrl,
+      });
+    }
+  }
+
+  const toInsert = [...merged.values()].slice(0, maxProducts);
+  if (toInsert.length === 0) {
+    res.json({ imported: 0, products: [], message: "لم يتم العثور على منتجات في هذه الصفحة. تأكد من أن الرابط هو صفحة المنتجات أو الصفحة الرئيسية للمتجر." });
+    return;
+  }
+
+  // Build image lookup from captured Puppeteer images
+  const imgByAlt = new Map<string, string>();
+  for (const img of capturedImages) {
+    if (img.alt?.trim()) imgByAlt.set(img.alt.trim().toLowerCase(), img.src);
+  }
+
+  function resolveUrl(raw: string | null | undefined, base: string): string | null {
+    if (!raw?.trim()) return null;
+    try { return new URL(raw, base).toString(); } catch { return null; }
+  }
+
+  // ── 5. Bulk insert with active=false ───────────────────────────────────────
+  const saved = [];
+  for (const p of toInsert) {
+    const img = resolveUrl(p.imageUrl, url) ?? imgByAlt.get(p.name.trim().toLowerCase()) ?? null;
+    try {
+      const [product] = await db.insert(productsTable).values({
+        name: p.name.trim().slice(0, 255),
+        description: p.description?.trim().slice(0, 4000) || null,
+        price: String(Math.max(0, p.price ?? 0)),
+        imageUrl: img,
+        active: false,
+        type: "physical",
+        sourceUrl: url,
+      } as never).returning();
+      saved.push(formatImportedProduct(product));
+    } catch (insertErr) {
+      logger.warn({ err: (insertErr as Error).message, name: p.name }, "bulk-import: insert failed");
+    }
+  }
+
+  res.json({
+    imported: saved.length,
+    products: saved,
+    message: `تم استيراد ${saved.length} منتج بنجاح — جميعها مخفية حتى تقوم بعرضها`,
   });
 });
 

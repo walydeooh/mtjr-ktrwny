@@ -42,6 +42,12 @@ A full-stack Arabic e-commerce platform with WhatsApp AI integration, similar to
 - Add/edit products with type-specific fields
 - Digital products: manage activation codes
 - Booking products: manage time slots (calendar)
+- **Bulk AI Import** (`استيراد من موقع`): paste any store URL → AI scrapes all products (images, descriptions, prices) and saves them as hidden (`active=false`); admin can then selectively publish each product via the eye-toggle button
+  - Endpoint: `POST /api/products/import-from-site` (`{ url, maxProducts }`)
+  - Extraction pipeline: JSON-LD → Microdata → Salla/Zid JS-variable detection → OpenAI/Anthropic AI
+  - SSRF protection (private IPs blocked)
+  - `sourceUrl` field stored on each imported product
+- Quick active/hidden toggle button (eye icon) on every product row
 
 ### Order Management (`/admin/orders`)
 - Orders list with status filters
