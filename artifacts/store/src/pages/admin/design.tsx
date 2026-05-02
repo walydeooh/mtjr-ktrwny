@@ -191,7 +191,7 @@ export default function DesignEditor() {
   const editingSection = editingId ? sections.find(s => s.id === editingId) : null;
 
   return (
-    <div className="flex h-[calc(100vh-2rem)] -m-6 md:-m-8 overflow-hidden rounded-xl border border-border shadow-2xl">
+    <div className="flex h-full -m-4 md:-m-6 overflow-hidden rounded-xl border border-border shadow-2xl">
       {/* Preview Panel */}
       <div className="flex-1 bg-gray-100 dark:bg-gray-900 flex flex-col min-w-0">
         <div className="flex items-center justify-between px-4 py-2 bg-white dark:bg-gray-800 border-b border-border text-sm">
