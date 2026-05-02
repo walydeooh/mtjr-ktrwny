@@ -140,9 +140,15 @@ export function AdminLayout({ children }: { children: ReactNode }) {
 
       {/* Main Content */}
       <main className="flex-1 md:mr-64 pt-16 md:pt-0">
-        <div className="p-6 md:p-8 max-w-6xl mx-auto">
-          {children}
-        </div>
+        {location.startsWith("/admin/design") ? (
+          <div className="p-4 md:p-6 h-[calc(100vh-64px)] md:h-screen overflow-hidden">
+            {children}
+          </div>
+        ) : (
+          <div className="p-6 md:p-8 max-w-6xl mx-auto">
+            {children}
+          </div>
+        )}
       </main>
     </div>
   );

@@ -131,6 +131,21 @@ The token getter in `main.tsx` switches based on `window.location.pathname`.
 - **Coupon scoping**: `startsAt`, `applicableProductIds`, `excludedProductIds` are stored, validated on `/api/coupons/validate`, AND enforced inside order discount calculation via shared `computeCouponDiscount(coupon, subtotal, items)`.
 - **Digital code linkage**: `digital_codes.orderId` is set on EVERY fulfillment path (Paylink callback, admin confirm-bank, admin manual mark-paid). `/api/my-orders` (customer) joins by `orderId` to list each paid order's codes plus the product's usage instructions (text/image/video/link) on `/my-orders`.
 
+## Salla-like Home Page Design Editor (`/admin/design`)
+- **`home_sections` DB table** (`lib/db/src/schema/home-sections.ts`): stores dynamic homepage sections with `type`, `title`, `sortOrder`, `active`, `config` (jsonb).
+- **API** (`/api/design/sections`): GET (public, auto-seeds 3 defaults on first call), POST/PATCH/DELETE/PUT-order (admin auth). Routes: `artifacts/api-server/src/routes/design.ts`.
+- **Admin editor** (`/admin/design`): full-screen split-panel editor similar to Salla.
+  - Left: live store preview in iframe with refresh button.
+  - Right: dark panel with 3 tabs — الصفحة الرئيسية | هوية المتجر | رأس وتذييل.
+  - Section list with native HTML5 drag-to-reorder (updates DB instantly).
+  - Per-section toggle (show/hide), inline config editor (expand/collapse), delete.
+  - "إضافة عنصر جديد" modal with 6 section types.
+  - "حفظ التغييرات" saves store identity settings.
+  - Admin layout uses full-screen mode (no max-width container) when on `/admin/design`.
+- **6 section types**: `hero_banner`, `categories_bar`, `products_grid`, `banners_grid`, `custom_text`, `marquee`.
+- **Home page** (`artifacts/store/src/pages/home.tsx`): fetches sections from `/api/design/sections` and renders them dynamically in order. Falls back to hardcoded layout if DB has no sections.
+- **Marquee animation** added to `index.css` (`@keyframes marquee`).
+
 ## Latest additions
 - **Bulk digital codes**: `POST /api/products/:id/codes/bulk` (admin auth) accepts `{codes: string[]}` — trims, dedupes within request AND against existing rows for the product (re-pasting is a no-op), validates the product is `type=digital`, returns `{added, skipped, codes}`. UI: textarea + toggle in the product form's codes section (`useBulkAddProductCodes`).
 - **In-dashboard AI assistant** (`/admin/assistant`, admin auth required): chat page powered by Anthropic via `@workspace/integrations-anthropic-ai` (provisioned through `setupReplitAIIntegrations`). Uses `claude-sonnet-4-6` with a tool-calling loop (max 8 iterations) and 5 narrowly-scoped tools: `find_products`, `add_codes_to_product` (digital-only, dedups), `list_orders` (filterable), `get_order_details`, `get_product_codes_summary`. System prompt is Arabic-first; messages are validated to only `user`/`assistant` roles via Zod. Endpoint: `POST /api/admin/assistant/chat`.

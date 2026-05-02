@@ -21,6 +21,7 @@ import bankAccountsRouter from "./bank-accounts";
 import productImportRouter from "./product-import";
 import assistantRouter from "./assistant";
 import storageRouter from "./storage";
+import designRouter from "./design";
 
 const router: IRouter = Router();
 
@@ -46,5 +47,6 @@ router.use(bankAccountsRouter);
 router.use(productImportRouter);
 router.use(storageRouter);
 router.use(assistantRouter);
+router.use(designRouter);
 
 export default router;

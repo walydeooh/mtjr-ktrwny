@@ -204,6 +204,11 @@
   --chart-5: 27 87% 67%;
 }
 
+@keyframes marquee {
+  0% { transform: translateX(100%); }
+  100% { transform: translateX(-100%); }
+}
+
 @layer base {
   * {
     @apply border-border;
