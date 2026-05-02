@@ -2,7 +2,6 @@ import { Router, type IRouter } from "express";
 import { z } from "zod";
 import { and, desc, eq, ilike, or, sql } from "drizzle-orm";
 import { db, productsTable, digitalCodesTable, ordersTable } from "@workspace/db";
-import { anthropic } from "@workspace/integrations-anthropic-ai";
 import type Anthropic from "@anthropic-ai/sdk";
 type MessageParam = Anthropic.MessageParam;
 type Tool = Anthropic.Tool;
@@ -203,6 +202,15 @@ router.post("/admin/assistant/chat", requireAuth, async (req, res): Promise<void
   const parsed = ChatBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+
+  let anthropic: import("@anthropic-ai/sdk").default;
+  try {
+    const mod = await import("@workspace/integrations-anthropic-ai");
+    anthropic = mod.anthropic;
+  } catch {
+    res.status(503).json({ error: "المساعد الذكي غير مفعّل. يرجى إعداد تكامل Anthropic أولاً." });
     return;
   }
 
