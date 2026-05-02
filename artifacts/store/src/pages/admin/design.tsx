@@ -4,6 +4,7 @@ import {
   GripVertical, Plus, Trash2, ChevronDown, ChevronUp, Eye, EyeOff,
   Store, LayoutDashboard, Image as ImageIcon, Grid3X3,
   Tag, Type, Megaphone, Save, RefreshCw, X, Settings2,
+  Layers, Upload, Link as LinkIcon,
 } from "lucide-react";
 
 const token = () => localStorage.getItem("token");
@@ -21,7 +22,15 @@ async function api(path: string, init?: RequestInit) {
   return r.json();
 }
 
-type SectionType = "hero_banner" | "banners_grid" | "categories_bar" | "products_grid" | "custom_text" | "marquee";
+type SectionType = "hero_banner" | "banners_grid" | "categories_bar" | "products_grid" | "custom_text" | "marquee" | "icons_grid";
+
+interface IconItem {
+  id: string;
+  imageUrl: string;
+  label: string;
+  linkType: "category" | "product" | "url";
+  linkValue: string;
+}
 
 interface Section {
   id: number;
@@ -56,6 +65,7 @@ const SECTION_META: Record<SectionType, { label: string; icon: React.ElementType
   products_grid: { label: "شبكة المنتجات", icon: LayoutDashboard, color: "text-orange-400", desc: "عرض منتجات بشبكة" },
   custom_text: { label: "نص مخصص", icon: Type, color: "text-pink-400", desc: "فقرة نصية أو HTML" },
   marquee: { label: "شريط إعلانات", icon: Megaphone, color: "text-yellow-400", desc: "نص متحرك في الأعلى" },
+  icons_grid: { label: "شبكة أيقونات", icon: Layers, color: "text-cyan-400", desc: "أيقونات دائرية مع روابط" },
 };
 
 const SECTION_TYPES = Object.entries(SECTION_META) as [SectionType, typeof SECTION_META[SectionType]][];
@@ -150,6 +160,13 @@ export default function DesignEditor() {
     if (type === "categories_bar") defaultConfig.showImages = true;
     if (type === "marquee") { defaultConfig.bgColor = "#1d4ed8"; defaultConfig.textColor = "#ffffff"; defaultConfig.text = "أهلاً بكم في متجرنا 🎉"; }
     if (type === "banners_grid") defaultConfig.layout = "2";
+    if (type === "icons_grid") {
+      defaultConfig.sectionTitle = "تسوق حسب الفئة";
+      defaultConfig.shape = "circle";
+      defaultConfig.items = [1, 2, 3, 4, 5].map(n => ({
+        id: String(n), imageUrl: "", label: `أيقونة ${n}`, linkType: "url", linkValue: "",
+      }));
+    }
     try {
       const section = await api("/design/sections", {
         method: "POST",
@@ -595,6 +612,10 @@ function SectionEditor({ section, onUpdate }: { section: Section; onUpdate: (con
           </DarkField>
         </>
       )}
+
+      {section.type === "icons_grid" && (
+        <IconsGridEditor cfg={cfg} set={set} />
+      )}
     </div>
   );
 }
@@ -652,17 +673,218 @@ function DarkToggle({ label, checked, onChange }: { label: string; checked: bool
 }
 
 function LightMediaPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+
+  const handleFile = async (file: File) => {
+    setUploading(true);
+    try {
+      const t = token();
+      const res = await fetch("/api/storage/uploads/request-url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(t ? { Authorization: `Bearer ${t}` } : {}) },
+        body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type }),
+      });
+      const { uploadURL, objectPath } = await res.json() as { uploadURL: string; objectPath: string };
+      await fetch(uploadURL, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
+      onChange(`/api/storage/files/${objectPath}`);
+    } catch { /* ignore upload error */ }
+    finally { setUploading(false); }
+  };
+
   return (
     <div className="space-y-2">
-      <input
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        placeholder="https://... أو ارفع صورة"
-        className="w-full bg-white/10 border border-white/20 text-white text-sm rounded-lg px-3 py-2 placeholder:text-white/30 focus:outline-none focus:border-blue-500"
-      />
+      <div className="flex gap-2">
+        <input
+          value={value}
+          onChange={e => onChange(e.target.value)}
+          placeholder="https://... أو رابط الصورة"
+          className="flex-1 min-w-0 bg-white/10 border border-white/20 text-white text-sm rounded-lg px-3 py-2 placeholder:text-white/30 focus:outline-none focus:border-blue-500"
+        />
+        <button
+          type="button"
+          onClick={() => fileRef.current?.click()}
+          disabled={uploading}
+          title="رفع من الجهاز"
+          className="shrink-0 flex items-center gap-1 px-3 py-2 bg-white/10 hover:bg-white/20 border border-white/20 rounded-lg text-xs text-white/80 transition-colors disabled:opacity-50"
+        >
+          {uploading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+          {uploading ? "..." : "رفع"}
+        </button>
+        <input ref={fileRef} type="file" accept="image/*" className="hidden"
+          onChange={e => { const f = e.target.files?.[0]; if (f) void handleFile(f); e.target.value = ""; }} />
+      </div>
       {value && (
         <div className="relative rounded-lg overflow-hidden bg-white/5 aspect-video">
           <img src={value} alt="" className="w-full h-full object-cover" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── Icons Grid Editor ─── */
+function IconsGridEditor({ cfg, set }: { cfg: Record<string, unknown>; set: (k: string, v: unknown) => void }) {
+  const items = ((cfg.items as IconItem[]) || []);
+
+  const addItem = () => {
+    const newItem: IconItem = {
+      id: Math.random().toString(36).slice(2, 9),
+      imageUrl: "", label: `أيقونة ${items.length + 1}`,
+      linkType: "url", linkValue: "",
+    };
+    set("items", [...items, newItem]);
+  };
+
+  const removeItem = (id: string) => set("items", items.filter(i => i.id !== id));
+
+  const updateItem = (id: string, patch: Partial<IconItem>) =>
+    set("items", items.map(i => i.id === id ? { ...i, ...patch } : i));
+
+  return (
+    <div className="space-y-3">
+      <DarkField label="عنوان القطاع">
+        <DarkInput value={String(cfg.sectionTitle || "")} onChange={v => set("sectionTitle", v)} placeholder="تسوق حسب الفئة" />
+      </DarkField>
+      <DarkField label="شكل الأيقونة">
+        <DarkSelect value={String(cfg.shape || "circle")} onChange={v => set("shape", v)} options={[
+          { value: "circle", label: "دائري" }, { value: "rounded", label: "مربع دائري" },
+        ]} />
+      </DarkField>
+
+      <div className="space-y-1">
+        <div className="flex items-center justify-between">
+          <label className="text-xs text-white/50 font-medium">الأيقونات ({items.length})</label>
+          <button
+            onClick={addItem}
+            className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 transition-colors"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            إضافة
+          </button>
+        </div>
+        <div className="space-y-2">
+          {items.map((item, idx) => (
+            <IconItemEditor key={item.id} item={item} index={idx} onUpdate={patch => updateItem(item.id, patch)} onRemove={() => removeItem(item.id)} />
+          ))}
+          {items.length === 0 && (
+            <p className="text-xs text-white/30 text-center py-3">لا توجد أيقونات — اضغط «إضافة»</p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function IconItemEditor({ item, index, onUpdate, onRemove }: {
+  item: IconItem; index: number;
+  onUpdate: (patch: Partial<IconItem>) => void;
+  onRemove: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+
+  const handleFile = async (file: File) => {
+    setUploading(true);
+    try {
+      const t = token();
+      const res = await fetch("/api/storage/uploads/request-url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(t ? { Authorization: `Bearer ${t}` } : {}) },
+        body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type }),
+      });
+      const { uploadURL, objectPath } = await res.json() as { uploadURL: string; objectPath: string };
+      await fetch(uploadURL, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
+      onUpdate({ imageUrl: `/api/storage/files/${objectPath}` });
+    } catch { /* ignore */ }
+    finally { setUploading(false); }
+  };
+
+  return (
+    <div className="rounded-lg bg-white/5 border border-white/10 overflow-hidden">
+      {/* Header row */}
+      <div className="flex items-center gap-2 px-3 py-2">
+        <div className="w-8 h-8 rounded-full overflow-hidden bg-white/10 shrink-0 flex items-center justify-center">
+          {item.imageUrl ? (
+            <img src={item.imageUrl} alt="" className="w-full h-full object-cover" />
+          ) : (
+            <ImageIcon className="w-4 h-4 text-white/30" />
+          )}
+        </div>
+        <span className="flex-1 text-sm text-white/80 truncate">{item.label || `أيقونة ${index + 1}`}</span>
+        <button onClick={() => setOpen(o => !o)} className="text-white/40 hover:text-white transition-colors p-1">
+          {open ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+        </button>
+        <button onClick={onRemove} className="text-white/20 hover:text-red-400 transition-colors p-1">
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
+      </div>
+
+      {/* Expanded editor */}
+      {open && (
+        <div className="border-t border-white/10 px-3 py-3 space-y-3">
+          {/* Image */}
+          <div className="space-y-1">
+            <label className="text-xs text-white/50">الصورة</label>
+            <div className="flex gap-2">
+              <input
+                value={item.imageUrl}
+                onChange={e => onUpdate({ imageUrl: e.target.value })}
+                placeholder="https://... أو رابط"
+                className="flex-1 min-w-0 bg-white/10 border border-white/20 text-white text-xs rounded-lg px-2 py-1.5 placeholder:text-white/30 focus:outline-none focus:border-blue-500"
+              />
+              <button
+                type="button"
+                onClick={() => fileRef.current?.click()}
+                disabled={uploading}
+                className="shrink-0 flex items-center gap-1 px-2 py-1.5 bg-blue-600/30 hover:bg-blue-600/50 border border-blue-500/40 rounded-lg text-xs text-blue-300 transition-colors disabled:opacity-50"
+              >
+                {uploading ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />}
+                رفع
+              </button>
+              <input ref={fileRef} type="file" accept="image/*" className="hidden"
+                onChange={e => { const f = e.target.files?.[0]; if (f) void handleFile(f); e.target.value = ""; }} />
+            </div>
+          </div>
+
+          {/* Label */}
+          <div className="space-y-1">
+            <label className="text-xs text-white/50">التسمية</label>
+            <input
+              value={item.label}
+              onChange={e => onUpdate({ label: e.target.value })}
+              placeholder="الأيقونة"
+              className="w-full bg-white/10 border border-white/20 text-white text-xs rounded-lg px-2 py-1.5 placeholder:text-white/30 focus:outline-none focus:border-blue-500"
+            />
+          </div>
+
+          {/* Link type */}
+          <div className="space-y-1">
+            <label className="text-xs text-white/50 flex items-center gap-1"><LinkIcon className="w-3 h-3" />نوع الرابط</label>
+            <select
+              value={item.linkType}
+              onChange={e => onUpdate({ linkType: e.target.value as IconItem["linkType"], linkValue: "" })}
+              className="w-full bg-white/10 border border-white/20 text-white text-xs rounded-lg px-2 py-1.5 focus:outline-none focus:border-blue-500"
+            >
+              <option value="url" className="bg-gray-800">رابط مخصص</option>
+              <option value="category" className="bg-gray-800">تصنيف</option>
+              <option value="product" className="bg-gray-800">منتج</option>
+            </select>
+          </div>
+
+          {/* Link value */}
+          <div className="space-y-1">
+            <label className="text-xs text-white/50">
+              {item.linkType === "category" ? "معرّف التصنيف (ID)" : item.linkType === "product" ? "معرّف المنتج (ID)" : "الرابط"}
+            </label>
+            <input
+              value={item.linkValue}
+              onChange={e => onUpdate({ linkValue: e.target.value })}
+              placeholder={item.linkType === "url" ? "https://..." : "مثال: 1"}
+              className="w-full bg-white/10 border border-white/20 text-white text-xs rounded-lg px-2 py-1.5 placeholder:text-white/30 focus:outline-none focus:border-blue-500"
+            />
+          </div>
         </div>
       )}
     </div>

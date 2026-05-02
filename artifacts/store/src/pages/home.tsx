@@ -261,6 +261,51 @@ function SectionRenderer({ section, products, isLoading, banners, categories, se
     );
   }
 
+  if (section.type === "icons_grid") {
+    const items = (cfg.items as Array<{ id: string; imageUrl: string; label: string; linkType: string; linkValue: string }>) || [];
+    if (items.length === 0) return null;
+    const shape = String(cfg.shape || "circle");
+    const shapeClass = shape === "circle" ? "rounded-full" : "rounded-2xl";
+
+    const getHref = (item: { linkType: string; linkValue: string }) => {
+      if (item.linkType === "category" && item.linkValue) return `/?category=${item.linkValue}`;
+      if (item.linkType === "product" && item.linkValue) return `/product/${item.linkValue}`;
+      return item.linkValue || "#";
+    };
+
+    return (
+      <div className="space-y-3">
+        {cfg.sectionTitle && <h2 className="text-xl font-bold">{String(cfg.sectionTitle)}</h2>}
+        <div className="overflow-x-auto -mx-2 px-2 pb-2">
+          <div className="flex gap-4 min-w-max">
+            {items.map(item => (
+              <Link
+                key={item.id}
+                href={getHref(item)}
+                className="shrink-0 flex flex-col items-center gap-2 group"
+              >
+                <div
+                  className={`w-16 h-16 ${shapeClass} overflow-hidden bg-muted border-2 border-border group-hover:border-primary transition-colors flex items-center justify-center`}
+                >
+                  {item.imageUrl ? (
+                    <img src={item.imageUrl} alt={item.label} className="w-full h-full object-cover" />
+                  ) : (
+                    <Tag className="w-7 h-7 text-muted-foreground" />
+                  )}
+                </div>
+                {item.label && (
+                  <span className="text-xs font-medium max-w-[72px] truncate text-center text-muted-foreground group-hover:text-primary transition-colors">
+                    {item.label}
+                  </span>
+                )}
+              </Link>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (section.type === "custom_text") {
     const align = String(cfg.textAlign || "right");
     return (
