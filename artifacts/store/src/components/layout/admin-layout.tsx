@@ -27,6 +27,28 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/theme-toggle";
+
+type StoreInfoTheme = { themePrimaryColor?: string; themeSecondaryColor?: string };
+
+function hexToHsl(hex: string): string {
+  const m = hex.replace("#", "").match(/.{2}/g);
+  if (!m) return "200 90% 50%";
+  const [r, g, b] = m.map((x) => parseInt(x, 16) / 255);
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  let h = 0, s = 0; const l = (max + min) / 2;
+  if (max !== min) {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    switch (max) {
+      case r: h = ((g - b) / d + (g < b ? 6 : 0)); break;
+      case g: h = ((b - r) / d + 2); break;
+      case b: h = ((r - g) / d + 4); break;
+    }
+    h /= 6;
+  }
+  return `${Math.round(h * 360)} ${Math.round(s * 100)}% ${Math.round(l * 100)}%`;
+}
 
 const navItems = [
   { href: "/admin", label: "الرئيسية", icon: LayoutDashboard },
@@ -59,6 +81,15 @@ export function AdminLayout({ children }: { children: ReactNode }) {
       setLocation("/admin-login");
     }
   }, [isLoading, user, setLocation]);
+
+  // Apply admin theme colors from store settings (so admin matches storefront branding)
+  useEffect(() => {
+    fetch("/api/settings").then(r => r.json()).then((info: StoreInfoTheme) => {
+      const root = document.documentElement;
+      if (info.themePrimaryColor) root.style.setProperty("--primary", hexToHsl(info.themePrimaryColor));
+      if (info.themeSecondaryColor) root.style.setProperty("--secondary", hexToHsl(info.themeSecondaryColor));
+    }).catch(() => {});
+  }, []);
 
   // Close sidebar on route change (mobile)
   useEffect(() => {
@@ -152,8 +183,12 @@ export function AdminLayout({ children }: { children: ReactNode }) {
         </Link>
 
         {/* Current page label */}
-        <div className="hidden md:flex items-center gap-2 text-sm text-sidebar-foreground/60">
+        <div className="hidden md:flex items-center gap-2 text-sm text-sidebar-foreground/60 flex-1 mr-4">
           {navItems.find(n => location === n.href || (location.startsWith(n.href) && n.href !== "/admin"))?.label}
+        </div>
+
+        <div className="flex items-center">
+          <ThemeToggle className="text-sidebar-foreground/80 hover:text-sidebar-foreground hover:bg-sidebar-accent" />
         </div>
       </header>
 

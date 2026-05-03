@@ -24,7 +24,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
-import { Save, Store, Globe, CreditCard, Bot, MessageSquare, ShoppingCart, Share2 } from "lucide-react";
+import { Save, Store, Globe, CreditCard, Bot, MessageSquare, ShoppingCart, Share2, Palette } from "lucide-react";
 
 const settingsSchema = z.object({
   storeName: z.string().min(2, "اسم المتجر مطلوب"),
@@ -41,6 +41,8 @@ const settingsSchema = z.object({
   showCategoriesBar: z.boolean(),
   affiliateEnabled: z.boolean(),
   affiliateDefaultCommission: z.string().optional().nullable(),
+  themePrimaryColor: z.string().regex(/^#[0-9a-fA-F]{6}$/, "يجب أن يكون لون hex صحيح مثل #2563eb").optional(),
+  themeSecondaryColor: z.string().regex(/^#[0-9a-fA-F]{6}$/, "يجب أن يكون لون hex صحيح مثل #1e40af").optional(),
 });
 
 type SettingsFormValues = z.infer<typeof settingsSchema>;
@@ -72,6 +74,8 @@ export default function SettingsPage() {
       showCategoriesBar: true,
       affiliateEnabled: true,
       affiliateDefaultCommission: "10",
+      themePrimaryColor: "#2563eb",
+      themeSecondaryColor: "#1e40af",
     },
   });
 
@@ -92,6 +96,8 @@ export default function SettingsPage() {
         showCategoriesBar: (settings as any).showCategoriesBar !== false,
         affiliateEnabled: (settings as any).affiliateEnabled !== false,
         affiliateDefaultCommission: (settings as any).affiliateDefaultCommission || "10",
+        themePrimaryColor: (settings as any).themePrimaryColor || "#2563eb",
+        themeSecondaryColor: (settings as any).themeSecondaryColor || "#1e40af",
       });
     }
   }, [settings, form]);
@@ -190,6 +196,77 @@ export default function SettingsPage() {
                   </FormItem>
                 )}
               />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <Palette className="w-5 h-5 text-primary" />
+                <CardTitle>المظهر والألوان</CardTitle>
+              </div>
+              <CardDescription>غيّر ألوان متجرك لتتناسب مع هويتك البصرية. سيتم تطبيق الألوان على واجهة المتجر ولوحة التحكم.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid sm:grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="themePrimaryColor"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>اللون الأساسي</FormLabel>
+                      <FormControl>
+                        <div className="flex items-center gap-3">
+                          <input
+                            type="color"
+                            value={field.value || "#2563eb"}
+                            onChange={(e) => field.onChange(e.target.value)}
+                            className="h-10 w-16 rounded border border-input cursor-pointer bg-transparent"
+                          />
+                          <Input
+                            value={field.value || ""}
+                            onChange={(e) => field.onChange(e.target.value)}
+                            dir="ltr"
+                            className="text-right font-mono"
+                            placeholder="#2563eb"
+                          />
+                        </div>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="themeSecondaryColor"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>اللون الثانوي</FormLabel>
+                      <FormControl>
+                        <div className="flex items-center gap-3">
+                          <input
+                            type="color"
+                            value={field.value || "#1e40af"}
+                            onChange={(e) => field.onChange(e.target.value)}
+                            className="h-10 w-16 rounded border border-input cursor-pointer bg-transparent"
+                          />
+                          <Input
+                            value={field.value || ""}
+                            onChange={(e) => field.onChange(e.target.value)}
+                            dir="ltr"
+                            className="text-right font-mono"
+                            placeholder="#1e40af"
+                          />
+                        </div>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                يمكن للزائر التبديل بين الوضع النهاري والداكن من زر القمر/الشمس في أعلى المتجر، وهذا التفضيل يُحفظ في متصفحه.
+              </p>
             </CardContent>
           </Card>
 

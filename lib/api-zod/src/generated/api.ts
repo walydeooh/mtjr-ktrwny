@@ -752,6 +752,8 @@ export const UpdateSettingsBody = zod.object({
   paylinkSecretKey: zod.string().nullish(),
   aiEnabled: zod.boolean().optional(),
   whatsappAutoReply: zod.boolean().optional(),
+  themePrimaryColor: zod.string().optional(),
+  themeSecondaryColor: zod.string().optional(),
 });
 
 export const UpdateSettingsResponse = zod.object({

@@ -4,6 +4,7 @@ import { useCart } from "@/hooks/use-cart";
 import { useCustomerAuth } from "@/hooks/use-customer-auth";
 import { ShoppingCart, Store, Search, User, Package, LogOut, Phone, Mail, MapPin, Instagram, Twitter, Share2 } from "lucide-react";
 import { FloatingCart } from "@/components/floating-cart";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -89,8 +90,8 @@ export function StoreLayout({ children }: { children: ReactNode }) {
   const storeName = info?.storeName || "متجري";
 
   return (
-    <div className="min-h-screen flex flex-col bg-gray-50">
-      <header className="sticky top-0 z-50 w-full border-b bg-white shadow-sm">
+    <div className="min-h-screen flex flex-col bg-background text-foreground">
+      <header className="sticky top-0 z-50 w-full border-b bg-card text-card-foreground shadow-sm">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between gap-4">
           <Link href="/" className="flex items-center gap-2 font-bold text-xl text-primary shrink-0">
             {info?.storeLogoUrl ? <img src={info.storeLogoUrl} alt={storeName} className="h-8 w-8 object-contain" /> : <Store className="h-6 w-6" />}
@@ -103,6 +104,7 @@ export function StoreLayout({ children }: { children: ReactNode }) {
           </form>
 
           <div className="flex items-center gap-2 shrink-0">
+            <ThemeToggle />
             {isAuthenticated ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
