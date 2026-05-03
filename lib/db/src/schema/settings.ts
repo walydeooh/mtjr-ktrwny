@@ -44,6 +44,11 @@ export const storeSettingsTable = pgTable("store_settings", {
   bankAccountNumber: text("bank_account_number"),
   // AI
   aiSystemPrompt: text("ai_system_prompt"),
+  // AI provider integration: which provider to use + their API keys
+  aiProvider: text("ai_provider").notNull().default("openai"), // openai | gemini
+  aiOpenaiApiKey: text("ai_openai_api_key"),
+  aiGeminiApiKey: text("ai_gemini_api_key"),
+  aiModel: text("ai_model"), // optional override (e.g., gpt-4o-mini, gemini-2.0-flash)
   // Affiliate program
   affiliateEnabled: boolean("affiliate_enabled").notNull().default(true),
   affiliateDefaultCommission: text("affiliate_default_commission").default("10"),

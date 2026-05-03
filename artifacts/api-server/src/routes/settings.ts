@@ -2,20 +2,34 @@ import { Router, type IRouter } from "express";
 import { db, storeSettingsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth";
+import { verifyToken } from "../lib/auth";
+
+function isAuthed(req: { headers: { authorization?: string } }): boolean {
+  const h = req.headers.authorization;
+  if (!h || !h.startsWith("Bearer ")) return false;
+  return !!verifyToken(h.slice(7));
+}
 
 const router: IRouter = Router();
 
-function formatSettings(s: typeof storeSettingsTable.$inferSelect) {
+function formatSettings(s: typeof storeSettingsTable.$inferSelect, includePrivate: boolean) {
   return {
     storeName: s.storeName,
     storeDescription: s.storeDescription || null,
     storeLogoUrl: s.storeLogoUrl || null,
     storeCurrency: s.storeCurrency,
     customDomain: s.customDomain || null,
-    paylinkApiKey: s.paylinkApiKey ? "***" : null,
-    paylinkSecretKey: s.paylinkSecretKey ? "***" : null,
+    paylinkApiKey: includePrivate ? (s.paylinkApiKey ? "***" : null) : null,
+    paylinkSecretKey: includePrivate ? (s.paylinkSecretKey ? "***" : null) : null,
     aiEnabled: s.aiEnabled,
-    aiSystemPrompt: s.aiSystemPrompt || null,
+    aiSystemPrompt: includePrivate ? (s.aiSystemPrompt || null) : null,
+    // AI provider config is admin-only — don't expose to public storefront
+    aiProvider: includePrivate ? (s.aiProvider || "openai") : null,
+    aiModel: includePrivate ? (s.aiModel || null) : null,
+    aiOpenaiApiKey: includePrivate ? (s.aiOpenaiApiKey ? "***" : null) : null,
+    aiGeminiApiKey: includePrivate ? (s.aiGeminiApiKey ? "***" : null) : null,
+    aiOpenaiConfigured: includePrivate ? !!s.aiOpenaiApiKey : false,
+    aiGeminiConfigured: includePrivate ? !!s.aiGeminiApiKey : false,
     whatsappAutoReply: s.whatsappAutoReply,
     adminWhatsappPhone: s.adminWhatsappPhone || null,
     themePrimaryColor: s.themePrimaryColor || "#0ea5e9",
@@ -44,14 +58,15 @@ function formatSettings(s: typeof storeSettingsTable.$inferSelect) {
   };
 }
 
-router.get("/settings", async (_req, res): Promise<void> => {
+router.get("/settings", async (req, res): Promise<void> => {
+  const authed = isAuthed(req);
   const rows = await db.select().from(storeSettingsTable);
   if (rows.length === 0) {
     const [created] = await db.insert(storeSettingsTable).values({}).returning();
-    res.json(formatSettings(created));
+    res.json(formatSettings(created, authed));
     return;
   }
-  res.json(formatSettings(rows[0]));
+  res.json(formatSettings(rows[0], authed));
 });
 
 // Map API field name -> DB column property on the schema
@@ -62,6 +77,8 @@ const STRING_FIELD_MAP: Record<string, string> = {
   storeCurrency: "storeCurrency",
   customDomain: "customDomain",
   aiSystemPrompt: "aiSystemPrompt",
+  aiProvider: "aiProvider",
+  aiModel: "aiModel",
   adminWhatsappPhone: "adminWhatsappPhone",
   themePrimaryColor: "themePrimaryColor",
   themeSecondaryColor: "themeSecondaryColor",
@@ -91,7 +108,7 @@ const BOOL_FIELDS = [
   "showCategoriesBar",
   "affiliateEnabled",
 ] as const;
-const SECRET_FIELDS = ["paylinkApiKey", "paylinkSecretKey"] as const;
+const SECRET_FIELDS = ["paylinkApiKey", "paylinkSecretKey", "aiOpenaiApiKey", "aiGeminiApiKey"] as const;
 
 router.patch("/settings", requireAuth, async (req, res): Promise<void> => {
   const body = (req.body || {}) as Record<string, unknown>;
@@ -100,7 +117,17 @@ router.patch("/settings", requireAuth, async (req, res): Promise<void> => {
   for (const [apiKey, dbKey] of Object.entries(STRING_FIELD_MAP)) {
     if (body[apiKey] !== undefined) {
       const v = body[apiKey];
-      updateData[dbKey] = v === null || v === "" ? null : String(v);
+      let strVal = v === null || v === "" ? null : String(v);
+      // Validate enum-like fields
+      if (apiKey === "aiProvider" && strVal !== null && strVal !== "openai" && strVal !== "gemini") {
+        res.status(400).json({ error: `aiProvider must be 'openai' or 'gemini', got: ${strVal}` });
+        return;
+      }
+      // Bound length on free-form AI fields
+      if ((apiKey === "aiModel" || apiKey === "aiSystemPrompt") && strVal && strVal.length > 4000) {
+        strVal = strVal.slice(0, 4000);
+      }
+      updateData[dbKey] = strVal;
     }
   }
   for (const f of BOOL_FIELDS) {
@@ -116,17 +143,17 @@ router.patch("/settings", requireAuth, async (req, res): Promise<void> => {
 
   if (Object.keys(updateData).length === 0) {
     const rows = await db.select().from(storeSettingsTable);
-    if (rows.length > 0) { res.json(formatSettings(rows[0])); return; }
+    if (rows.length > 0) { res.json(formatSettings(rows[0], true)); return; }
   }
 
   const rows = await db.select().from(storeSettingsTable);
   if (rows.length === 0) {
     const [created] = await db.insert(storeSettingsTable).values(updateData).returning();
-    res.json(formatSettings(created));
+    res.json(formatSettings(created, true));
     return;
   }
   const [updated] = await db.update(storeSettingsTable).set(updateData).where(eq(storeSettingsTable.id, rows[0].id)).returning();
-  res.json(formatSettings(updated));
+  res.json(formatSettings(updated, true));
 });
 
 export default router;

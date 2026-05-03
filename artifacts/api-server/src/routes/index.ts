@@ -22,6 +22,7 @@ import productImportRouter from "./product-import";
 import assistantRouter from "./assistant";
 import storageRouter from "./storage";
 import designRouter from "./design";
+import aiTestRouter from "./ai-test";
 
 const router: IRouter = Router();
 
@@ -48,5 +49,6 @@ router.use(productImportRouter);
 router.use(storageRouter);
 router.use(assistantRouter);
 router.use(designRouter);
+router.use(aiTestRouter);
 
 export default router;

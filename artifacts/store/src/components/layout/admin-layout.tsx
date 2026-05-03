@@ -23,6 +23,7 @@ import {
   Image as ImageIcon,
   Banknote,
   Sparkles,
+  KeyRound,
   ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -30,6 +31,7 @@ import { Button } from "@/components/ui/button";
 const navItems = [
   { href: "/admin", label: "الرئيسية", icon: LayoutDashboard },
   { href: "/admin/assistant", label: "المساعد الذكي", icon: Sparkles },
+  { href: "/admin/ai-integration", label: "ربط الذكاء الاصطناعي", icon: KeyRound },
   { href: "/admin/orders", label: "الطلبات", icon: ShoppingCart },
   { href: "/admin/products", label: "المنتجات", icon: Package },
   { href: "/admin/customers", label: "العملاء", icon: Users },
