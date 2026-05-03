@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 import { arSA } from "date-fns/locale";
-import { Package, ChevronLeft, LogOut, Key, Copy, ExternalLink, BookOpen, Repeat, Clock, CheckCircle2, XCircle } from "lucide-react";
+import { Package, ChevronLeft, LogOut, Key, Copy, ExternalLink, BookOpen, Repeat, Clock, CheckCircle2, XCircle, CreditCard } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useState, useEffect as useEffectLocal } from "react";
 
@@ -25,6 +25,36 @@ type CustomerSub = {
   remainingDays: number;
   isActive: boolean;
 };
+
+function PayNowButton({ orderId, paymentLink }: { orderId: number; paymentLink: string | null | undefined }) {
+  const { toast } = useToast();
+  const [loading, setLoading] = useState(false);
+
+  const handleClick = async () => {
+    if (paymentLink) { window.location.href = paymentLink; return; }
+    setLoading(true);
+    try {
+      const r = await fetch(`/api/orders/${orderId}/payment`, { method: "POST" });
+      if (!r.ok) {
+        const e = await r.json().catch(() => ({}));
+        throw new Error(e.error || "تعذّر إنشاء رابط الدفع");
+      }
+      const data = await r.json();
+      if (data.paymentUrl) { window.location.href = data.paymentUrl; return; }
+      throw new Error("رابط الدفع غير متوفر");
+    } catch (e) {
+      toast({ variant: "destructive", title: "خطأ", description: (e as Error).message });
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Button size="sm" onClick={handleClick} disabled={loading}>
+      <CreditCard className="w-4 h-4 ml-1" />
+      {loading ? "جاري التحويل..." : "ادفع الآن"}
+    </Button>
+  );
+}
 
 function MySubscriptions() {
   const [subs, setSubs] = useState<CustomerSub[] | null>(null);
@@ -254,12 +284,8 @@ export default function MyOrders() {
                     </span>
                     <div className="flex items-center gap-3">
                       <span className="font-bold text-primary">{order.totalAmount.toLocaleString("ar-SA")} ر.س</span>
-                      {order.paymentLink && order.paymentStatus !== "paid" && (
-                        <Button asChild size="sm">
-                          <a href={order.paymentLink} target="_blank" rel="noreferrer">
-                            ادفع الآن <ChevronLeft className="w-4 h-4 mr-1" />
-                          </a>
-                        </Button>
+                      {order.paymentStatus !== "paid" && (
+                        <PayNowButton orderId={order.id} paymentLink={order.paymentLink} />
                       )}
                     </div>
                   </div>
