@@ -27,12 +27,22 @@ type Settings = {
   bankInstructions: string | null;
 };
 
+type BankAccount = {
+  id: number;
+  bankName: string;
+  accountName: string;
+  accountNumber: string | null;
+  iban: string;
+  logoUrl: string | null;
+};
+
 export default function Checkout() {
   const { items, total, clearCart } = useCart();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const { customer, isAuthenticated } = useCustomerAuth();
   const [settings, setSettings] = useState<Settings | null>(null);
+  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
 
   const [paymentMethod, setPaymentMethod] = useState<"paylink" | "bank_transfer">("paylink");
   const [couponInput, setCouponInput] = useState("");
@@ -48,6 +58,9 @@ export default function Checkout() {
   }, [items.length, setLocation]);
   useEffect(() => {
     fetch("/api/settings").then((r) => r.json()).then(setSettings).catch(() => {});
+    fetch("/api/bank-accounts").then((r) => r.json()).then((d) => {
+      if (Array.isArray(d)) setBankAccounts(d);
+    }).catch(() => {});
   }, []);
 
   const form = useForm<z.infer<typeof checkoutSchema>>({
@@ -211,7 +224,7 @@ export default function Checkout() {
                       <div className="flex items-center gap-2 mb-1"><CreditCard className="h-5 w-5" /><span className="font-semibold">دفع إلكتروني</span></div>
                       <p className="text-xs text-muted-foreground">مدى، فيزا، ماستركارد</p>
                     </button>
-                    {settings?.bankTransferEnabled && (
+                    {(settings?.bankTransferEnabled || bankAccounts.length > 0) && (
                       <button type="button" onClick={() => setPaymentMethod("bank_transfer")} className={`p-4 rounded-lg border-2 text-right transition ${paymentMethod === "bank_transfer" ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"}`}>
                         <div className="flex items-center gap-2 mb-1"><Banknote className="h-5 w-5" /><span className="font-semibold">تحويل بنكي</span></div>
                         <p className="text-xs text-muted-foreground">يتم التأكيد خلال 24 ساعة</p>
@@ -229,12 +242,35 @@ export default function Checkout() {
                     </div>
                   </div>
                 ) : (
-                  <div className="rounded-lg border bg-muted/30 p-4 text-sm space-y-2">
+                  <div className="rounded-lg border bg-muted/30 p-4 text-sm space-y-3">
                     <p className="font-semibold">معلومات التحويل البنكي:</p>
-                    {settings?.bankName && <p><span className="text-muted-foreground">البنك:</span> {settings.bankName}</p>}
-                    {settings?.bankAccountName && <p><span className="text-muted-foreground">الاسم:</span> {settings.bankAccountName}</p>}
-                    {settings?.bankAccountIban && <p><span className="text-muted-foreground">الآيبان:</span> <span className="font-mono" dir="ltr">{settings.bankAccountIban}</span></p>}
-                    {settings?.bankInstructions && <p className="text-muted-foreground pt-1 border-t mt-2">{settings.bankInstructions}</p>}
+                    {bankAccounts.length > 0 ? (
+                      <div className="space-y-3">
+                        {bankAccounts.map((b) => (
+                          <div key={b.id} className="rounded border bg-background p-3 space-y-1">
+                            <div className="flex items-center gap-2 font-bold">
+                              {b.logoUrl ? (
+                                <img src={b.logoUrl} alt={b.bankName} className="h-6 w-6 object-contain" />
+                              ) : (
+                                <Banknote className="h-4 w-4 text-primary" />
+                              )}
+                              <span>{b.bankName}</span>
+                            </div>
+                            <p><span className="text-muted-foreground">الاسم:</span> {b.accountName}</p>
+                            {b.accountNumber && <p><span className="text-muted-foreground">رقم الحساب:</span> <span className="font-mono" dir="ltr">{b.accountNumber}</span></p>}
+                            <p><span className="text-muted-foreground">الآيبان:</span> <span className="font-mono" dir="ltr">{b.iban}</span></p>
+                          </div>
+                        ))}
+                        <p className="text-muted-foreground text-xs">يمكنك التحويل لأي حساب من الحسابات أعلاه ثم رفع إيصال التحويل بعد إتمام الطلب.</p>
+                      </div>
+                    ) : (
+                      <>
+                        {settings?.bankName && <p><span className="text-muted-foreground">البنك:</span> {settings.bankName}</p>}
+                        {settings?.bankAccountName && <p><span className="text-muted-foreground">الاسم:</span> {settings.bankAccountName}</p>}
+                        {settings?.bankAccountIban && <p><span className="text-muted-foreground">الآيبان:</span> <span className="font-mono" dir="ltr">{settings.bankAccountIban}</span></p>}
+                        {settings?.bankInstructions && <p className="text-muted-foreground pt-1 border-t mt-2">{settings.bankInstructions}</p>}
+                      </>
+                    )}
                   </div>
                 )}
 

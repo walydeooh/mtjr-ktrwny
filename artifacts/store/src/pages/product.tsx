@@ -32,7 +32,6 @@ export default function ProductDetail() {
         .then(r => r.json())
         .then((p: Plan[]) => {
           setPlans(p);
-          if (p.length > 0 && selectedPlanId === null) setSelectedPlanId(p[0].id);
         })
         .catch(() => {});
     }
@@ -45,7 +44,6 @@ export default function ProductDetail() {
         .then(r => r.json())
         .then((o: Option[]) => {
           setOptions(Array.isArray(o) ? o : []);
-          if (Array.isArray(o) && o.length > 0 && selectedOptionId === null) setSelectedOptionId(o[0].id);
         })
         .catch(() => {});
     }

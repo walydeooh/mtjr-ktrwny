@@ -79,7 +79,13 @@ export default function Home() {
 
   const handleAddToCart = (e: React.MouseEvent, product: typeof products[number]) => {
     e.preventDefault();
-    if ((product as Record<string, unknown>).type === "booking") { window.location.href = `/product/${product.id}`; return; }
+    const p = product as Record<string, unknown>;
+    // Products that require the customer to pick a plan/option/slot must be
+    // configured from the product detail page — never one-click.
+    if (p.type === "booking" || p.type === "subscription" || p.hasOptions || p.hasPlans) {
+      window.location.href = `/product/${product.id}`;
+      return;
+    }
     addItem({ product, quantity: 1 });
     toast({ title: "تمت الإضافة للسلة", description: `${product.name} أُضيف للسلة` });
   };

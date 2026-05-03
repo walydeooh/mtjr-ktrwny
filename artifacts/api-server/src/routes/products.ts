@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { z } from "zod";
-import { db, productsTable, digitalCodesTable, timeSlotsTable } from "@workspace/db";
-import { eq, and } from "drizzle-orm";
+import { db, productsTable, digitalCodesTable, timeSlotsTable, productOptionsTable, subscriptionPlansTable } from "@workspace/db";
+import { eq, and, inArray } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth";
 import {
   CreateProductBody,
@@ -51,7 +51,31 @@ router.get("/products", async (req, res): Promise<void> => {
     products = await db.select().from(productsTable);
   }
 
-  res.json(products.map(formatProduct));
+  // Annotate each product with hasOptions / hasPlans so the storefront knows
+  // it must redirect the customer to the product page (to pick a plan/option)
+  // instead of doing a one-click add-to-cart.
+  const ids = products.map((p) => p.id);
+  let optionProductIds = new Set<number>();
+  let planProductIds = new Set<number>();
+  if (ids.length > 0) {
+    const opts = await db
+      .select({ productId: productOptionsTable.productId })
+      .from(productOptionsTable)
+      .where(and(eq(productOptionsTable.active, true), inArray(productOptionsTable.productId, ids)));
+    optionProductIds = new Set(opts.map((o) => o.productId));
+
+    const plans = await db
+      .select({ productId: subscriptionPlansTable.productId })
+      .from(subscriptionPlansTable)
+      .where(and(eq(subscriptionPlansTable.active, true), inArray(subscriptionPlansTable.productId, ids)));
+    planProductIds = new Set(plans.map((p) => p.productId));
+  }
+
+  res.json(products.map((p) => ({
+    ...formatProduct(p),
+    hasOptions: optionProductIds.has(p.id),
+    hasPlans: planProductIds.has(p.id),
+  })));
 });
 
 router.post("/products", requireAuth, async (req, res): Promise<void> => {
