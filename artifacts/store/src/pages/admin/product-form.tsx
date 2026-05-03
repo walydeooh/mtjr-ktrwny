@@ -32,6 +32,7 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -449,11 +450,11 @@ export default function ProductForm() {
       <div className="space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3 p-4 border rounded-lg bg-muted/30">
           <div className="md:col-span-2">
-            <FormLabel>اسم الخيار</FormLabel>
+            <Label>اسم الخيار</Label>
             <Input value={optName} onChange={(e) => setOptName(e.target.value)} placeholder="مثال: 100 إعادة تغريد، حجم S، لون أحمر" />
           </div>
           <div>
-            <FormLabel>السعر (ر.س)</FormLabel>
+            <Label>السعر (ر.س)</Label>
             <Input type="number" min={0} step="0.01" value={optPrice} onChange={(e) => setOptPrice(e.target.value === "" ? "" : Number(e.target.value))} />
           </div>
           <div className="md:col-span-1 flex items-end">
@@ -558,15 +559,15 @@ export default function ProductForm() {
       <div className="space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3 p-4 border rounded-lg bg-muted/30">
           <div className="md:col-span-2">
-            <FormLabel>اسم الخطة</FormLabel>
+            <Label>اسم الخطة</Label>
             <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="مثال: شهر واحد، 3 أشهر، سنة كاملة" />
           </div>
           <div>
-            <FormLabel>المدة (أيام)</FormLabel>
+            <Label>المدة (أيام)</Label>
             <Input type="number" min={1} value={duration} onChange={(e) => setDuration(e.target.value === "" ? "" : Number(e.target.value))} />
           </div>
           <div>
-            <FormLabel>السعر (ر.س)</FormLabel>
+            <Label>السعر (ر.س)</Label>
             <Input type="number" min={0} step="0.01" value={planPrice} onChange={(e) => setPlanPrice(e.target.value === "" ? "" : Number(e.target.value))} />
           </div>
           <div className="md:col-span-4">
