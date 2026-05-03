@@ -817,6 +817,24 @@ export const VerifyCustomerOtpBody = zod.object({
   code: zod.string(),
 });
 
+/**
+ * @summary Register a new customer account with email + password
+ */
+export const RegisterCustomerBody = zod.object({
+  name: zod.string().min(2),
+  phone: zod.string().min(9),
+  email: zod.string().email(),
+  password: zod.string().min(6),
+});
+
+/**
+ * @summary Login a customer using email + password
+ */
+export const LoginCustomerBody = zod.object({
+  email: zod.string().email(),
+  password: zod.string().min(1),
+});
+
 export const VerifyCustomerOtpResponse = zod.object({
   token: zod.string(),
   customer: zod.object({

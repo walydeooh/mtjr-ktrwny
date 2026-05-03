@@ -12,8 +12,10 @@ import {
 const router: IRouter = Router();
 
 function formatCustomer(c: typeof customersTable.$inferSelect) {
+  // Strip the bcrypt password hash before returning a customer to any client.
+  const { passwordHash: _omit, ...safe } = c;
   return {
-    ...c,
+    ...safe,
     totalSpent: parseFloat(c.totalSpent as unknown as string),
     createdAt: c.createdAt.toISOString(),
     updatedAt: c.updatedAt.toISOString(),

@@ -4,9 +4,12 @@ import { eq, and, desc } from "drizzle-orm";
 import {
   RequestCustomerOtpBody,
   VerifyCustomerOtpBody,
+  RegisterCustomerBody,
+  LoginCustomerBody,
 } from "@workspace/api-zod";
 import { signCustomerToken, generateOtpCode, normalizePhone, verifyCustomerToken } from "../lib/customer-auth";
 import { sendWhatsappMessage, waitForConnection } from "../lib/whatsapp";
+import bcrypt from "bcryptjs";
 
 const router: IRouter = Router();
 const OTP_TTL_SECONDS = 300; // 5 minutes
@@ -30,8 +33,10 @@ function clearVerifyAttempts(phone: string): void {
 }
 
 function formatCustomer(c: typeof customersTable.$inferSelect) {
+  // Never expose the password hash to clients, even if the column was selected.
+  const { passwordHash: _omit, ...safe } = c;
   return {
-    ...c,
+    ...safe,
     totalSpent: parseFloat(c.totalSpent as unknown as string),
     createdAt: c.createdAt.toISOString(),
     updatedAt: c.updatedAt.toISOString(),
@@ -150,6 +155,89 @@ router.post("/customer-auth/verify-otp", async (req, res): Promise<void> => {
 
   const token = signCustomerToken({ id: customer.id, phone: customer.phone });
 
+  res.json({ token, customer: formatCustomer(customer) });
+});
+
+// Register a new customer with name, phone, email and password.
+// The account is created already verified (password counts as verification).
+router.post("/customer-auth/register", async (req, res): Promise<void> => {
+  const parsed = RegisterCustomerBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "بيانات غير صحيحة" });
+    return;
+  }
+  const phone = normalizePhone(parsed.data.phone);
+  const email = parsed.data.email.trim().toLowerCase();
+
+  const [existingByPhone] = await db.select().from(customersTable).where(eq(customersTable.phone, phone));
+  if (existingByPhone?.passwordHash) {
+    res.status(409).json({ error: "يوجد حساب بهذا الرقم بالفعل، سجّل الدخول" });
+    return;
+  }
+
+  // Block registration if the email already belongs to a *different* phone, so
+  // every email maps to at most one credentialed account (login by email is
+  // therefore unambiguous).
+  const [existingByEmail] = await db.select().from(customersTable).where(eq(customersTable.email, email));
+  if (existingByEmail && existingByEmail.id !== existingByPhone?.id && existingByEmail.passwordHash) {
+    res.status(409).json({ error: "هذا البريد مستخدم لحساب آخر" });
+    return;
+  }
+
+  const passwordHash = await bcrypt.hash(parsed.data.password, 10);
+
+  let customer;
+  if (existingByPhone) {
+    // Customer record exists (e.g. created via OTP/checkout) — attach credentials.
+    [customer] = await db.update(customersTable).set({
+      name: parsed.data.name.trim(),
+      email,
+      passwordHash,
+      verified: true,
+    }).where(eq(customersTable.id, existingByPhone.id)).returning();
+  } else {
+    [customer] = await db.insert(customersTable).values({
+      name: parsed.data.name.trim(),
+      phone,
+      email,
+      passwordHash,
+      verified: true,
+    }).returning();
+  }
+
+  if (!customer) {
+    res.status(500).json({ error: "تعذّر إنشاء الحساب" });
+    return;
+  }
+
+  const token = signCustomerToken({ id: customer.id, phone: customer.phone });
+  res.json({ token, customer: formatCustomer(customer) });
+});
+
+// Login with email + password.
+router.post("/customer-auth/login", async (req, res): Promise<void> => {
+  const parsed = LoginCustomerBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "بيانات غير صحيحة" });
+    return;
+  }
+  const email = parsed.data.email.trim().toLowerCase();
+
+  const [customer] = await db.select().from(customersTable).where(eq(customersTable.email, email));
+  // Use a constant-time-ish failure path: if no account or no hash, still hash
+  // the supplied password to avoid leaking account existence via timing.
+  if (!customer || !customer.passwordHash) {
+    await bcrypt.hash(parsed.data.password, 10).catch(() => undefined);
+    res.status(401).json({ error: "البريد أو كلمة المرور غير صحيحة" });
+    return;
+  }
+  const ok = await bcrypt.compare(parsed.data.password, customer.passwordHash);
+  if (!ok) {
+    res.status(401).json({ error: "البريد أو كلمة المرور غير صحيحة" });
+    return;
+  }
+
+  const token = signCustomerToken({ id: customer.id, phone: customer.phone });
   res.json({ token, customer: formatCustomer(customer) });
 });
 

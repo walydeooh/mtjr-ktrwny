@@ -7,6 +7,7 @@ export const customersTable = pgTable("customers", {
   name: text("name").notNull(),
   phone: text("phone").notNull().unique(),
   email: text("email"),
+  passwordHash: text("password_hash"),
   address: text("address"),
   totalOrders: integer("total_orders").notNull().default(0),
   totalSpent: numeric("total_spent", { precision: 10, scale: 2 }).notNull().default("0"),
