@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db, ordersTable, customersTable, productsTable, digitalCodesTable, couponsTable, affiliatesTable, storeSettingsTable, subscriptionPlansTable, customerSubscriptionsTable, productOptionsTable } from "@workspace/db";
 import { computeCouponDiscount } from "./coupons";
-import { eq, and } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 import {
   CreateOrderBody,
   UpdateOrderBody,
@@ -247,8 +247,15 @@ router.patch("/orders/:id", async (req, res): Promise<void> => {
   const [updated] = await db.update(ordersTable).set(parsed.data).where(eq(ordersTable.id, params.data.id)).returning();
 
   if (parsed.data.paymentStatus === "paid" && order.paymentStatus !== "paid") {
-    const items = (order.items as unknown as Array<{ productId: number; productName: string; quantity: number; plan?: { planId: number; planName: string; durationDays: number } }>) || [];
-    for (const item of items) {
+    await fulfillPaidOrder(order, req.log);
+  }
+
+  res.json(formatOrder(updated));
+});
+
+async function fulfillPaidOrder(order: typeof ordersTable.$inferSelect, log: { warn: (msg: string) => void }) {
+  const items = (order.items as unknown as Array<{ productId: number; productName: string; quantity: number; plan?: { planId: number; planName: string; durationDays: number } }>) || [];
+  for (const item of items) {
       const [product] = await db.select().from(productsTable).where(eq(productsTable.id, item.productId));
       // Subscription: create N customer-subscription records (one per quantity).
       // Idempotency: skip if any rows already exist for (orderId, productId) — protects
@@ -281,7 +288,7 @@ router.patch("/orders/:id", async (req, res): Promise<void> => {
             await sendWhatsappMessage(order.customerPhone,
               `تم تفعيل اشتراكك في "${item.productName}" — ${item.plan.planName} (${item.plan.durationDays} يوم). يمكنك متابعة اشتراكاتك من حسابك.`);
           } catch {
-            req.log.warn("Could not send subscription confirmation");
+            log.warn("Could not send subscription confirmation");
           }
         }
       }
@@ -294,20 +301,17 @@ router.patch("/orders/:id", async (req, res): Promise<void> => {
           try {
             await sendWhatsappMessage(order.customerPhone, `شكراً لطلبك! كود المنتج الخاص بك هو: ${code.code}`);
           } catch {
-            req.log.warn("Could not send WhatsApp message for digital code");
+            log.warn("Could not send WhatsApp message for digital code");
           }
         }
       }
-    }
-    try {
-      await sendWhatsappMessage(order.customerPhone, `تم تأكيد طلبك رقم #${order.id} بنجاح! شكراً لثقتك بنا.`);
-    } catch {
-      req.log.warn("Could not send WhatsApp confirmation");
-    }
   }
-
-  res.json(formatOrder(updated));
-});
+  try {
+    await sendWhatsappMessage(order.customerPhone, `تم تأكيد طلبك رقم #${order.id} بنجاح! شكراً لثقتك بنا.`);
+  } catch {
+    log.warn("Could not send WhatsApp confirmation");
+  }
+}
 
 router.post("/orders/:id/payment", async (req, res): Promise<void> => {
   const params = CreateOrderPaymentParams.safeParse(req.params);
@@ -327,6 +331,49 @@ router.post("/orders/:id/payment", async (req, res): Promise<void> => {
 
   const amount = parseFloat(order.totalAmount as unknown as string);
   const paymentId = `order_${order.id}_${Date.now()}`;
+
+  // Free order (price 0 or 100% coupon): bypass payment gateway and fulfill immediately.
+  if (amount <= 0) {
+    // Authorization: must be admin OR the customer who placed this order.
+    // Without this, anyone could enumerate IDs and force-confirm any zero-total
+    // order (allocating digital codes / activating subscriptions for orders
+    // they don't own).
+    const bearer = (req.headers.authorization || "").replace(/^Bearer\s+/i, "");
+    let authorized = false;
+    if (bearer) {
+      const { verifyToken } = await import("../lib/auth");
+      if (verifyToken(bearer)?.id) authorized = true;
+      if (!authorized) {
+        const { verifyCustomerToken } = await import("../lib/customer-auth");
+        const cust = verifyCustomerToken(bearer);
+        if (cust?.phone && cust.phone === order.customerPhone) authorized = true;
+      }
+    }
+    if (!authorized) {
+      res.status(401).json({ error: "غير مصرح" });
+      return;
+    }
+
+    // Atomic + idempotent: only one concurrent request will flip the row from
+    // unpaid → paid. fulfillPaidOrder runs only when this request actually
+    // performed the transition, preventing duplicate digital-code allocation
+    // or subscription activation under concurrent calls.
+    const updated = await db.update(ordersTable).set({
+      paymentId,
+      paymentMethod: "free",
+      paymentStatus: "paid",
+      status: "confirmed",
+    }).where(and(
+      eq(ordersTable.id, order.id),
+      sql`${ordersTable.paymentStatus} != 'paid'`,
+    )).returning();
+    if (updated.length > 0) {
+      await fulfillPaidOrder(order, req.log);
+    }
+    res.json({ paid: true, free: true, orderId: order.id, amount: 0 });
+    return;
+  }
+
   const origin = process.env["REPLIT_DEV_DOMAIN"]
     ? `https://${process.env["REPLIT_DEV_DOMAIN"]}`
     : (process.env["REPLIT_DOMAINS"] ? `https://${process.env["REPLIT_DOMAINS"].split(",")[0]}` : "http://localhost");

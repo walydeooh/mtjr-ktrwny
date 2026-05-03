@@ -26,20 +26,31 @@ type CustomerSub = {
   isActive: boolean;
 };
 
-function PayNowButton({ orderId, paymentLink }: { orderId: number; paymentLink: string | null | undefined }) {
+function PayNowButton({ orderId, amount, paymentLink }: { orderId: number; amount: number; paymentLink: string | null | undefined }) {
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
   const [loading, setLoading] = useState(false);
+  const isFree = amount <= 0;
 
   const handleClick = async () => {
-    if (paymentLink) { window.location.href = paymentLink; return; }
+    if (!isFree && paymentLink) { window.location.href = paymentLink; return; }
     setLoading(true);
     try {
-      const r = await fetch(`/api/orders/${orderId}/payment`, { method: "POST" });
+      const custToken = localStorage.getItem("customer_token");
+      const r = await fetch(`/api/orders/${orderId}/payment`, {
+        method: "POST",
+        headers: custToken ? { Authorization: `Bearer ${custToken}` } : {},
+      });
       if (!r.ok) {
         const e = await r.json().catch(() => ({}));
-        throw new Error(e.error || "تعذّر إنشاء رابط الدفع");
+        throw new Error(e.error || "تعذّر إتمام العملية");
       }
       const data = await r.json();
+      if (data.paid || data.free) {
+        toast({ title: "تم تأكيد طلبك", description: "تم تنفيذ الطلب بنجاح" });
+        setLocation(`/payment/success?orderId=${orderId}`);
+        return;
+      }
       if (data.paymentUrl) { window.location.href = data.paymentUrl; return; }
       throw new Error("رابط الدفع غير متوفر");
     } catch (e) {
@@ -51,7 +62,7 @@ function PayNowButton({ orderId, paymentLink }: { orderId: number; paymentLink: 
   return (
     <Button size="sm" onClick={handleClick} disabled={loading}>
       <CreditCard className="w-4 h-4 ml-1" />
-      {loading ? "جاري التحويل..." : "ادفع الآن"}
+      {loading ? "جاري المعالجة..." : isFree ? "اتمام الشراء" : "ادفع الآن"}
     </Button>
   );
 }
@@ -285,7 +296,7 @@ export default function MyOrders() {
                     <div className="flex items-center gap-3">
                       <span className="font-bold text-primary">{order.totalAmount.toLocaleString("ar-SA")} ر.س</span>
                       {order.paymentStatus !== "paid" && (
-                        <PayNowButton orderId={order.id} paymentLink={order.paymentLink} />
+                        <PayNowButton orderId={order.id} amount={order.totalAmount} paymentLink={order.paymentLink} />
                       )}
                     </div>
                   </div>

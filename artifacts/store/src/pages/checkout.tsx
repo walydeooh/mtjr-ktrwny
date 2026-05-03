@@ -144,8 +144,12 @@ export default function Checkout() {
         return;
       }
 
-      // Paylink
-      const payRes = await fetch(`/api/orders/${order.id}/payment`, { method: "POST" });
+      // Paylink (or free-order auto-confirm when amount = 0)
+      const custToken = localStorage.getItem("customer_token");
+      const payRes = await fetch(`/api/orders/${order.id}/payment`, {
+        method: "POST",
+        headers: custToken ? { Authorization: `Bearer ${custToken}` } : {},
+      });
       if (!payRes.ok) {
         toast({ variant: "destructive", title: "تعذّر إنشاء رابط الدفع", description: "راجع طلباتي" });
         setLocation("/my-orders");
@@ -153,6 +157,11 @@ export default function Checkout() {
       }
       const payment = await payRes.json();
       clearCart();
+      if (payment.paid || payment.free) {
+        toast({ title: "تم تأكيد طلبك", description: "تم تنفيذ الطلب بنجاح" });
+        setLocation(`/payment/success?orderId=${order.id}`);
+        return;
+      }
       toast({ title: "تم إنشاء طلبك", description: "يتم تحويلك لصفحة الدفع..." });
       window.location.href = payment.paymentUrl;
     } catch (e) {
@@ -276,7 +285,11 @@ export default function Checkout() {
 
                 <Button type="submit" className="w-full h-14 text-lg gap-2" disabled={submitting}>
                   <Lock className="w-5 h-5" />
-                  {submitting ? "جاري المعالجة..." : `تأكيد الطلب - ${finalTotal.toLocaleString("ar-SA")} ر.س`}
+                  {submitting
+                    ? "جاري المعالجة..."
+                    : finalTotal <= 0
+                      ? "اتمام الشراء (مجاناً)"
+                      : `تأكيد الطلب - ${finalTotal.toLocaleString("ar-SA")} ر.س`}
                 </Button>
               </form>
             </Form>
