@@ -100,7 +100,11 @@ export default function Checkout() {
           customerName: customer.name,
           customerPhone: customer.phone,
           notes: values.notes,
-          items: items.map((item) => ({ productId: item.product.id, quantity: item.quantity })),
+          items: items.map((item) => ({
+            productId: item.product.id,
+            quantity: item.quantity,
+            ...(item.planId ? { planId: item.planId } : {}),
+          })),
           source: "web",
           couponCode: coupon?.code,
           affiliateCode: affiliateCode || undefined,

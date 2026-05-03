@@ -29,27 +29,31 @@ export default function Cart() {
 
       <div className="grid lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 space-y-4">
-          {items.map((item) => (
-            <Card key={`${item.product.id}-${item.slotId || 'none'}`}>
+          {items.map((item) => {
+            const unitPrice = item.planPrice ?? item.product.price;
+            const typeLabel =
+              item.product.type === "digital" ? "منتج رقمي" :
+              item.product.type === "physical" ? "منتج مادي" :
+              item.product.type === "subscription" ? "اشتراك" : "خدمة حجز";
+            return (
+            <Card key={`${item.product.id}-${item.slotId || 'none'}-${item.planId || 'none'}`}>
               <CardContent className="p-4 sm:p-6 flex gap-4 sm:gap-6">
                 <div className="w-24 h-24 rounded-lg bg-muted flex-shrink-0 border overflow-hidden">
                   {item.product.imageUrl && (
-                    <img 
-                      src={item.product.imageUrl} 
-                      alt={item.product.name}
-                      className="w-full h-full object-cover"
-                    />
+                    <img src={item.product.imageUrl} alt={item.product.name} className="w-full h-full object-cover" />
                   )}
                 </div>
-                
+
                 <div className="flex-1 flex flex-col">
                   <div className="flex justify-between gap-4">
                     <div>
                       <h3 className="font-bold text-lg line-clamp-1">{item.product.name}</h3>
-                      <p className="text-muted-foreground text-sm">
-                        {item.product.type === 'digital' ? 'منتج رقمي' : 
-                         item.product.type === 'physical' ? 'منتج مادي' : 'خدمة حجز'}
-                      </p>
+                      <p className="text-muted-foreground text-sm">{typeLabel}</p>
+                      {item.planName && (
+                        <p className="text-primary text-sm mt-1 font-medium bg-primary/10 inline-block px-2 py-0.5 rounded">
+                          الخطة: {item.planName} ({item.planDurationDays} يوم)
+                        </p>
+                      )}
                       {item.date && item.startTime && (
                         <p className="text-primary text-sm mt-1 font-medium bg-primary/10 inline-block px-2 py-0.5 rounded">
                           {item.date} | {item.startTime}
@@ -57,37 +61,26 @@ export default function Cart() {
                       )}
                     </div>
                     <div className="font-bold text-lg shrink-0">
-                      {(item.product.price * item.quantity).toLocaleString('ar-SA')} ر.س
+                      {(unitPrice * item.quantity).toLocaleString('ar-SA')} ر.س
                     </div>
                   </div>
-                  
+
                   <div className="flex items-center justify-between mt-auto pt-4">
                     <div className="flex items-center border rounded-md">
-                      <Button 
-                        variant="ghost" 
-                        size="icon" 
-                        className="h-8 w-8 rounded-none rounded-r-md"
-                        onClick={() => updateQuantity(item.product.id, item.quantity - 1)}
-                      >
+                      <Button variant="ghost" size="icon" className="h-8 w-8 rounded-none rounded-r-md"
+                        onClick={() => updateQuantity(item.product.id, item.quantity - 1, item.planId)}>
                         <Minus className="h-3 w-3" />
                       </Button>
                       <span className="w-10 text-center text-sm font-medium">{item.quantity}</span>
-                      <Button 
-                        variant="ghost" 
-                        size="icon" 
-                        className="h-8 w-8 rounded-none rounded-l-md"
-                        onClick={() => updateQuantity(item.product.id, item.quantity + 1)}
-                      >
+                      <Button variant="ghost" size="icon" className="h-8 w-8 rounded-none rounded-l-md"
+                        onClick={() => updateQuantity(item.product.id, item.quantity + 1, item.planId)}>
                         <Plus className="h-3 w-3" />
                       </Button>
                     </div>
-                    
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
+
+                    <Button variant="ghost" size="sm"
                       className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                      onClick={() => removeItem(item.product.id)}
-                    >
+                      onClick={() => removeItem(item.product.id, item.planId)}>
                       <Trash2 className="h-4 w-4 ml-2" />
                       حذف
                     </Button>
@@ -95,7 +88,7 @@ export default function Cart() {
                 </div>
               </CardContent>
             </Card>
-          ))}
+          );})}
         </div>
 
         <div className="lg:col-span-1">

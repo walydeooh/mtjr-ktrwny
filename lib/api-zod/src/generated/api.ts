@@ -45,7 +45,7 @@ export const GetMeResponse = zod.object({
  */
 export const ListProductsQueryParams = zod.object({
   category: zod.coerce.string().optional(),
-  type: zod.enum(["digital", "physical", "booking"]).optional(),
+  type: zod.enum(["digital", "physical", "booking", "subscription"]).optional(),
   active: zod.coerce.string().optional(),
 });
 
@@ -55,7 +55,7 @@ export const ListProductsResponseItem = zod.object({
   description: zod.string().nullish(),
   price: zod.number(),
   imageUrl: zod.string().nullish(),
-  type: zod.enum(["digital", "physical", "booking"]),
+  type: zod.enum(["digital", "physical", "booking", "subscription"]),
   category: zod.string().nullish(),
   stock: zod.number().nullish(),
   active: zod.boolean(),
@@ -72,7 +72,7 @@ export const CreateProductBody = zod.object({
   description: zod.string().nullish(),
   price: zod.number(),
   imageUrl: zod.string().nullish(),
-  type: zod.enum(["digital", "physical", "booking"]),
+  type: zod.enum(["digital", "physical", "booking", "subscription"]),
   category: zod.string().nullish(),
   categoryId: zod.number().nullish(),
   stock: zod.number().nullish(),
@@ -106,7 +106,7 @@ export const GetProductResponse = zod.object({
   description: zod.string().nullish(),
   price: zod.number(),
   imageUrl: zod.string().nullish(),
-  type: zod.enum(["digital", "physical", "booking"]),
+  type: zod.enum(["digital", "physical", "booking", "subscription"]),
   category: zod.string().nullish(),
   stock: zod.number().nullish(),
   active: zod.boolean(),
@@ -126,7 +126,7 @@ export const UpdateProductBody = zod.object({
   description: zod.string().nullish(),
   price: zod.number().optional(),
   imageUrl: zod.string().nullish(),
-  type: zod.enum(["digital", "physical", "booking"]).optional(),
+  type: zod.enum(["digital", "physical", "booking", "subscription"]).optional(),
   category: zod.string().nullish(),
   categoryId: zod.number().nullish(),
   stock: zod.number().nullish(),
@@ -153,7 +153,7 @@ export const UpdateProductResponse = zod.object({
   description: zod.string().nullish(),
   price: zod.number(),
   imageUrl: zod.string().nullish(),
-  type: zod.enum(["digital", "physical", "booking"]),
+  type: zod.enum(["digital", "physical", "booking", "subscription"]),
   category: zod.string().nullish(),
   stock: zod.number().nullish(),
   active: zod.boolean(),
@@ -333,6 +333,7 @@ export const CreateOrderBody = zod.object({
     zod.object({
       productId: zod.number(),
       quantity: zod.number(),
+      planId: zod.number().optional(),
     }),
   ),
   notes: zod.string().nullish(),

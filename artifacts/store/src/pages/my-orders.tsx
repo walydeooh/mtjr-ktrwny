@@ -7,8 +7,99 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 import { arSA } from "date-fns/locale";
-import { Package, ChevronLeft, LogOut, Key, Copy, ExternalLink, BookOpen } from "lucide-react";
+import { Package, ChevronLeft, LogOut, Key, Copy, ExternalLink, BookOpen, Repeat, Clock, CheckCircle2, XCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useState, useEffect as useEffectLocal } from "react";
+
+type CustomerSub = {
+  id: number;
+  productId: number;
+  productName: string;
+  planId: number | null;
+  planName: string;
+  durationDays: number;
+  orderId: number;
+  startedAt: string;
+  expiresAt: string;
+  status: string;
+  remainingDays: number;
+  isActive: boolean;
+};
+
+function MySubscriptions() {
+  const [subs, setSubs] = useState<CustomerSub[] | null>(null);
+  const [loading, setLoading] = useState(true);
+  useEffectLocal(() => {
+    const token = localStorage.getItem("customer_token");
+    fetch("/api/my-subscriptions", { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+      .then(r => r.ok ? r.json() : [])
+      .then((data) => setSubs(Array.isArray(data) ? data : []))
+      .catch(() => setSubs([]))
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) return <div className="space-y-3">{[1,2].map(i => <div key={i} className="h-24 bg-muted animate-pulse rounded-xl" />)}</div>;
+  if (!subs || subs.length === 0) {
+    return (
+      <Card>
+        <CardContent className="p-10 text-center">
+          <Repeat className="w-12 h-12 mx-auto text-muted-foreground/50 mb-3" />
+          <p className="text-muted-foreground">لا توجد اشتراكات بعد</p>
+        </CardContent>
+      </Card>
+    );
+  }
+  return (
+    <div className="space-y-3">
+      {subs.map((s) => {
+        const expiresAt = new Date(s.expiresAt);
+        const total = s.durationDays;
+        const elapsed = Math.max(0, total - s.remainingDays);
+        const pct = total > 0 ? Math.min(100, Math.round((elapsed / total) * 100)) : 0;
+        return (
+          <Card key={s.id} className={s.isActive ? "border-primary/30" : "opacity-75"}>
+            <CardContent className="p-5">
+              <div className="flex items-start justify-between gap-3 flex-wrap mb-3">
+                <div className="min-w-0">
+                  <h3 className="font-bold text-lg flex items-center gap-2">
+                    <Repeat className="w-4 h-4 text-primary" /> {s.productName}
+                  </h3>
+                  <p className="text-sm text-muted-foreground mt-1">الخطة: {s.planName} • {s.durationDays} يوم</p>
+                </div>
+                {s.isActive ? (
+                  <Badge variant="default" className="bg-green-600 hover:bg-green-600">
+                    <CheckCircle2 className="w-3 h-3 ml-1" /> نشط
+                  </Badge>
+                ) : (
+                  <Badge variant="secondary">
+                    <XCircle className="w-3 h-3 ml-1" /> منتهٍ
+                  </Badge>
+                )}
+              </div>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="flex items-center gap-1.5 text-muted-foreground">
+                    <Clock className="w-3.5 h-3.5" />
+                    {s.isActive ? `متبقي ${s.remainingDays} يوم` : "انتهى الاشتراك"}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    ينتهي: {format(expiresAt, "PPP", { locale: arSA })}
+                  </span>
+                </div>
+                <div className="h-2 bg-muted rounded-full overflow-hidden">
+                  <div className={`h-full transition-all ${s.isActive ? "bg-primary" : "bg-muted-foreground/40"}`} style={{ width: `${pct}%` }} />
+                </div>
+              </div>
+              <div className="text-xs text-muted-foreground mt-3 pt-3 border-t">
+                من طلب #{s.orderId} • بدأ {format(new Date(s.startedAt), "PPP", { locale: arSA })}
+              </div>
+            </CardContent>
+          </Card>
+        );
+      })}
+    </div>
+  );
+}
 
 const STATUS_LABEL: Record<string, string> = {
   pending: "جديد",
@@ -70,6 +161,13 @@ export default function MyOrders() {
           </Button>
         </CardContent>
       </Card>
+
+      <div>
+        <h1 className="text-2xl font-bold mb-4 flex items-center gap-2">
+          <Repeat className="w-5 h-5 text-primary" /> اشتراكاتي
+        </h1>
+        <MySubscriptions />
+      </div>
 
       <div>
         <h1 className="text-2xl font-bold mb-4">طلباتي السابقة</h1>

@@ -7,13 +7,18 @@ export interface CartItem {
   slotId?: number;
   date?: string;
   startTime?: string;
+  // For subscription products: chosen plan
+  planId?: number;
+  planName?: string;
+  planPrice?: number;
+  planDurationDays?: number;
 }
 
 interface CartContextType {
   items: CartItem[];
   addItem: (item: CartItem) => void;
-  removeItem: (productId: number) => void;
-  updateQuantity: (productId: number, quantity: number) => void;
+  removeItem: (productId: number, planId?: number) => void;
+  updateQuantity: (productId: number, quantity: number, planId?: number) => void;
   clearCart: () => void;
   total: number;
 }
@@ -37,7 +42,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const addItem = (newItem: CartItem) => {
     setItems((current) => {
       const existing = current.find(
-        (item) => item.product.id === newItem.product.id && item.slotId === newItem.slotId
+        (item) => item.product.id === newItem.product.id && item.slotId === newItem.slotId && item.planId === newItem.planId
       );
       if (existing) {
         return current.map((item) =>
@@ -50,18 +55,21 @@ export function CartProvider({ children }: { children: ReactNode }) {
     });
   };
 
-  const removeItem = (productId: number) => {
-    setItems((current) => current.filter((item) => item.product.id !== productId));
+  // Cart-line key (productId + planId) — subscription items with different plans coexist.
+  const lineKey = (productId: number, planId?: number) => `${productId}:${planId ?? "none"}`;
+
+  const removeItem = (productId: number, planId?: number) => {
+    setItems((current) => current.filter((item) => lineKey(item.product.id, item.planId) !== lineKey(productId, planId)));
   };
 
-  const updateQuantity = (productId: number, quantity: number) => {
+  const updateQuantity = (productId: number, quantity: number, planId?: number) => {
     if (quantity <= 0) {
-      removeItem(productId);
+      removeItem(productId, planId);
       return;
     }
     setItems((current) =>
       current.map((item) =>
-        item.product.id === productId ? { ...item, quantity } : item
+        lineKey(item.product.id, item.planId) === lineKey(productId, planId) ? { ...item, quantity } : item
       )
     );
   };
@@ -69,7 +77,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const clearCart = () => setItems([]);
 
   const total = items.reduce(
-    (sum, item) => sum + item.product.price * item.quantity,
+    (sum, item) => sum + (item.planPrice ?? item.product.price) * item.quantity,
     0
   );
 

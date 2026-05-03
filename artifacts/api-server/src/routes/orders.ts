@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, ordersTable, customersTable, productsTable, digitalCodesTable, couponsTable, affiliatesTable, storeSettingsTable } from "@workspace/db";
+import { db, ordersTable, customersTable, productsTable, digitalCodesTable, couponsTable, affiliatesTable, storeSettingsTable, subscriptionPlansTable, customerSubscriptionsTable } from "@workspace/db";
 import { computeCouponDiscount } from "./coupons";
 import { eq, and } from "drizzle-orm";
 import {
@@ -64,7 +64,26 @@ router.post("/orders", async (req, res): Promise<void> => {
       res.status(400).json({ error: `المنتج ${item.productId} غير موجود` });
       return;
     }
-    const unitPrice = parseFloat(product.price as unknown as string);
+    let unitPrice = parseFloat(product.price as unknown as string);
+    let planSnapshot: { planId: number; planName: string; durationDays: number } | null = null;
+    // Subscription products MUST have a plan selected; price comes from the plan.
+    if (product.type === "subscription") {
+      const planIdRaw = (item as { planId?: number | string }).planId;
+      const planId = typeof planIdRaw === "number" ? planIdRaw : parseInt(String(planIdRaw || ""), 10);
+      if (!planId || isNaN(planId)) {
+        res.status(400).json({ error: `يجب اختيار مدة الاشتراك للمنتج "${product.name}"` });
+        return;
+      }
+      const [plan] = await db.select().from(subscriptionPlansTable).where(
+        and(eq(subscriptionPlansTable.id, planId), eq(subscriptionPlansTable.productId, product.id))
+      );
+      if (!plan || !plan.active) {
+        res.status(400).json({ error: `خطة الاشتراك المختارة غير متاحة للمنتج "${product.name}"` });
+        return;
+      }
+      unitPrice = parseFloat(plan.price as unknown as string);
+      planSnapshot = { planId: plan.id, planName: plan.name, durationDays: plan.durationDays };
+    }
     const totalPrice = unitPrice * item.quantity;
     subtotal += totalPrice;
     orderItems.push({
@@ -74,6 +93,7 @@ router.post("/orders", async (req, res): Promise<void> => {
       quantity: item.quantity,
       unitPrice,
       totalPrice,
+      ...(planSnapshot ? { plan: planSnapshot } : {}),
     });
   }
 
@@ -203,9 +223,44 @@ router.patch("/orders/:id", async (req, res): Promise<void> => {
   const [updated] = await db.update(ordersTable).set(parsed.data).where(eq(ordersTable.id, params.data.id)).returning();
 
   if (parsed.data.paymentStatus === "paid" && order.paymentStatus !== "paid") {
-    const items = (order.items as unknown as Array<{ productId: number; productName: string; quantity: number }>) || [];
+    const items = (order.items as unknown as Array<{ productId: number; productName: string; quantity: number; plan?: { planId: number; planName: string; durationDays: number } }>) || [];
     for (const item of items) {
       const [product] = await db.select().from(productsTable).where(eq(productsTable.id, item.productId));
+      // Subscription: create N customer-subscription records (one per quantity).
+      // Idempotency: skip if any rows already exist for (orderId, productId) — protects
+      // against duplicate fulfillment from re-applied PATCH/webhook retries.
+      if (product?.type === "subscription" && item.plan && order.customerId) {
+        const existing = await db.select().from(customerSubscriptionsTable).where(
+          and(
+            eq(customerSubscriptionsTable.orderId, order.id),
+            eq(customerSubscriptionsTable.productId, item.productId),
+          )
+        );
+        if (existing.length === 0) {
+          for (let q = 0; q < item.quantity; q++) {
+            const startedAt = new Date();
+            const expiresAt = new Date(startedAt.getTime() + item.plan.durationDays * 24 * 60 * 60 * 1000);
+            await db.insert(customerSubscriptionsTable).values({
+              customerId: order.customerId,
+              productId: item.productId,
+              productName: item.productName,
+              planId: item.plan.planId,
+              planName: item.plan.planName,
+              durationDays: item.plan.durationDays,
+              orderId: order.id,
+              startedAt,
+              expiresAt,
+              status: "active",
+            });
+          }
+          try {
+            await sendWhatsappMessage(order.customerPhone,
+              `تم تفعيل اشتراكك في "${item.productName}" — ${item.plan.planName} (${item.plan.durationDays} يوم). يمكنك متابعة اشتراكاتك من حسابك.`);
+          } catch {
+            req.log.warn("Could not send subscription confirmation");
+          }
+        }
+      }
       if (product?.type === "digital") {
         const [code] = await db.select().from(digitalCodesTable).where(
           and(eq(digitalCodesTable.productId, item.productId), eq(digitalCodesTable.used, false))

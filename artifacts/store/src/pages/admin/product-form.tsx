@@ -41,7 +41,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowRight, Plus, Trash2, Key, Calendar, Sparkles, Tag, BookOpen } from "lucide-react";
+import { ArrowRight, Plus, Trash2, Key, Calendar, Sparkles, Tag, BookOpen, Repeat } from "lucide-react";
 import { Link } from "wouter";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
@@ -50,7 +50,7 @@ const productSchema = z.object({
   description: z.string().optional(),
   price: z.coerce.number().min(0, "السعر يجب أن يكون رقماً موجباً"),
   imageUrl: z.string().url("رابط الصورة غير صحيح").optional().or(z.literal("")),
-  type: z.enum(["digital", "physical", "booking"]),
+  type: z.enum(["digital", "physical", "booking", "subscription"]),
   category: z.string().optional(),
   categoryId: z.coerce.number().optional().nullable(),
   stock: z.coerce.number().min(0).optional().nullable(),
@@ -387,6 +387,122 @@ export default function ProductForm() {
     );
   };
 
+  function SubscriptionPlans({ productId }: { productId: number }) {
+    type Plan = { id: number; name: string; durationDays: number; price: number; sortOrder: number; active: boolean };
+    const [plans, setPlans] = useState<Plan[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [name, setName] = useState("");
+    const [duration, setDuration] = useState<number | "">(30);
+    const [planPrice, setPlanPrice] = useState<number | "">("");
+    const [adding, setAdding] = useState(false);
+
+    const authHeaders = (extra: Record<string, string> = {}): Record<string, string> => {
+      const token = localStorage.getItem("token");
+      return { ...extra, ...(token ? { Authorization: `Bearer ${token}` } : {}) };
+    };
+
+    const reload = async () => {
+      setLoading(true);
+      try {
+        const r = await fetch(`/api/admin/products/${productId}/subscription-plans`, {
+          headers: authHeaders(),
+        });
+        if (r.ok) setPlans(await r.json());
+      } finally { setLoading(false); }
+    };
+    useEffect(() => { reload(); }, [productId]);
+
+    const addPlan = async () => {
+      if (!name.trim() || !duration || planPrice === "" || Number(planPrice) < 0) {
+        toast({ variant: "destructive", title: "تعبئة كل الحقول مطلوبة" });
+        return;
+      }
+      setAdding(true);
+      try {
+        const r = await fetch(`/api/admin/products/${productId}/subscription-plans`, {
+          method: "POST",
+          headers: authHeaders({ "Content-Type": "application/json" }),
+          body: JSON.stringify({ name: name.trim(), durationDays: Number(duration), price: Number(planPrice) }),
+        });
+        if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || "فشل الإضافة");
+        setName(""); setPlanPrice(""); setDuration(30);
+        toast({ title: "تمت إضافة الخطة" });
+        reload();
+      } catch (e) {
+        toast({ variant: "destructive", title: "خطأ", description: (e as Error).message });
+      } finally { setAdding(false); }
+    };
+
+    const togglePlan = async (p: Plan) => {
+      await fetch(`/api/admin/subscription-plans/${p.id}`, {
+        method: "PATCH",
+        headers: authHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ active: !p.active }),
+      });
+      reload();
+    };
+
+    const removePlan = async (p: Plan) => {
+      if (!confirm(`حذف خطة "${p.name}"؟`)) return;
+      await fetch(`/api/admin/subscription-plans/${p.id}`, { method: "DELETE", headers: authHeaders() });
+      reload();
+    };
+
+    return (
+      <div className="space-y-6">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3 p-4 border rounded-lg bg-muted/30">
+          <div className="md:col-span-2">
+            <FormLabel>اسم الخطة</FormLabel>
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="مثال: شهر واحد، 3 أشهر، سنة كاملة" />
+          </div>
+          <div>
+            <FormLabel>المدة (أيام)</FormLabel>
+            <Input type="number" min={1} value={duration} onChange={(e) => setDuration(e.target.value === "" ? "" : Number(e.target.value))} />
+          </div>
+          <div>
+            <FormLabel>السعر (ر.س)</FormLabel>
+            <Input type="number" min={0} step="0.01" value={planPrice} onChange={(e) => setPlanPrice(e.target.value === "" ? "" : Number(e.target.value))} />
+          </div>
+          <div className="md:col-span-4">
+            <Button type="button" onClick={addPlan} disabled={adding} className="w-full md:w-auto">
+              <Plus className="w-4 h-4 ml-2" /> {adding ? "جاري الإضافة..." : "إضافة خطة"}
+            </Button>
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="h-24 bg-muted/30 animate-pulse rounded-lg" />
+        ) : plans.length === 0 ? (
+          <div className="text-center text-muted-foreground py-8 border rounded-lg border-dashed">
+            لا توجد خطط بعد. أضف على الأقل خطة واحدة ليتمكن العملاء من الاشتراك.
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {plans.map((p) => (
+              <div key={p.id} className={`flex items-center gap-4 p-4 rounded-lg border ${p.active ? "" : "opacity-60 bg-muted/20"}`}>
+                <div className="flex-1 min-w-0">
+                  <div className="font-bold flex items-center gap-2">
+                    <Repeat className="w-4 h-4 text-primary" /> {p.name}
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1">{p.durationDays} يوم</div>
+                </div>
+                <div className="font-bold text-primary text-lg">{p.price.toLocaleString("ar-SA")} ر.س</div>
+                <div className="flex items-center gap-2">
+                  <Switch checked={p.active} onCheckedChange={() => togglePlan(p)} />
+                  <Button variant="ghost" size="icon" type="button"
+                    className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                    onClick={() => removePlan(p)}>
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   if (isEditing && isProductLoading) {
     return <div className="animate-pulse h-96 bg-muted rounded-xl"></div>;
   }
@@ -409,6 +525,7 @@ export default function ProductForm() {
           <TabsTrigger value="general">المعلومات الأساسية</TabsTrigger>
           {isEditing && watchType === "digital" && <TabsTrigger value="codes"><Key className="w-4 h-4 mr-2" /> الأكواد الرقمية</TabsTrigger>}
           {isEditing && watchType === "booking" && <TabsTrigger value="slots"><Calendar className="w-4 h-4 mr-2" /> المواعيد المتاحة</TabsTrigger>}
+          {isEditing && watchType === "subscription" && <TabsTrigger value="plans"><Repeat className="w-4 h-4 mr-2" /> خطط الاشتراك</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="general">
@@ -538,6 +655,7 @@ export default function ProductForm() {
                                 <SelectItem value="physical">منتج مادي (يتطلب شحن)</SelectItem>
                                 <SelectItem value="digital">منتج رقمي (أكواد)</SelectItem>
                                 <SelectItem value="booking">حجز/خدمة (مواعيد)</SelectItem>
+                                <SelectItem value="subscription">اشتراك (خطط بمدد متعددة)</SelectItem>
                               </SelectContent>
                             </Select>
                             {isEditing && <FormDescription>لا يمكن تغيير نوع المنتج بعد إنشائه</FormDescription>}
@@ -769,6 +887,20 @@ export default function ProductForm() {
               </CardHeader>
               <CardContent>
                 <BookingSlots />
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
+
+        {isEditing && watchType === "subscription" && (
+          <TabsContent value="plans">
+            <Card>
+              <CardHeader>
+                <CardTitle>خطط الاشتراك</CardTitle>
+                <CardDescription>أنشئ مدداً متعددة للاشتراك بأسعار مختلفة (مثل: شهر / 3 أشهر / سنة). سيختار العميل واحدة منها عند الشراء.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <SubscriptionPlans productId={productId} />
               </CardContent>
             </Card>
           </TabsContent>

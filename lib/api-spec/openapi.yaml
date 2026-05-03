@@ -105,7 +105,7 @@ paths:
           in: query
           schema:
             type: string
-            enum: [digital, physical, booking]
+            enum: [digital, physical, booking, subscription]
         - name: active
           in: query
           schema:
@@ -1062,7 +1062,7 @@ components:
           type: ["string", "null"]
         type:
           type: string
-          enum: [digital, physical, booking]
+          enum: [digital, physical, booking, subscription]
         category:
           type: ["string", "null"]
         stock:
@@ -1088,7 +1088,7 @@ components:
           type: ["string", "null"]
         type:
           type: string
-          enum: [digital, physical, booking]
+          enum: [digital, physical, booking, subscription]
         category:
           type: ["string", "null"]
         categoryId:
@@ -1127,7 +1127,7 @@ components:
           type: ["string", "null"]
         type:
           type: string
-          enum: [digital, physical, booking]
+          enum: [digital, physical, booking, subscription]
         category:
           type: ["string", "null"]
         categoryId:

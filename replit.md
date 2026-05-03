@@ -163,3 +163,17 @@ The token getter in `main.tsx` switches based on `window.location.pathname`.
   - Saved value in DB is `/api/storage{objectPath}`, served by `GET /storage/objects/*` (mounted under `/api`).
   - Files: `artifacts/api-server/src/routes/storage.ts`, `artifacts/api-server/src/lib/objectStorage.ts`, `artifacts/api-server/src/lib/objectAcl.ts`, `lib/object-storage-web/src/use-upload.ts`.
   - Lib `@workspace/object-storage-web` is intentionally a leaf package (not composite); only `useUpload` is exported, and `ObjectUploader.tsx` carries `// @ts-nocheck` because Uppy v5 wants stricter React 19 type packages than we currently set up. Root `pnpm.overrides` pin `react`/`react-dom` to `19.1.0` so Uppy doesn't pull a duplicate React.
+- **Subscription product type**: New product `type=subscription` with multi-duration plans.
+  - Schema: `subscription_plans` (productId, name, durationDays, price, sortOrder, active) + `customer_subscriptions` (customerId, productId+name snapshot, planId+name snapshot, durationDays, orderId, startedAt, expiresAt, status). Schema lives in `lib/db/src/schema/products.ts`.
+  - Routes (`artifacts/api-server/src/routes/subscriptions.ts`):
+    - Public: `GET /api/products/:id/subscription-plans` (active only).
+    - Admin: `GET/POST /api/admin/products/:id/subscription-plans`, `PATCH/DELETE /api/admin/subscription-plans/:planId`.
+    - Customer: `GET /api/my-subscriptions` (requires customer JWT) — returns plans with derived `remainingDays`/`isActive` and auto-derives `expired` status.
+  - Order flow: orders.ts validates that subscription items include `planId`; rejects with 400 if missing or plan inactive. Plan price (not product.price) is used as `unitPrice`; plan snapshot stored on order item as `{plan: {planId, planName, durationDays}}`.
+  - On payment paid (`PATCH /orders/:id` with `paymentStatus=paid`): for each subscription item, inserts N customer-subscription rows (one per quantity), each with `expiresAt = now + durationDays`. Sends WhatsApp activation message.
+  - **api-zod**: `CreateOrderBody.items` schema extended with `planId: z.number().optional()`; product `type` enum extended with `subscription` in both `lib/api-spec/openapi.yaml` and `lib/api-zod/src/generated/api.ts`.
+  - Cart hook (`artifacts/store/src/hooks/use-cart.tsx`): `CartItem` carries `planId/planName/planPrice/planDurationDays`; cart-line key is now `productId:planId`; total uses `planPrice ?? product.price`; remove/updateQuantity take optional `planId`.
+  - Storefront product page (`/product/:id`): when `type=subscription`, fetches plans and shows REQUIRED radio-card picker; add-to-cart disabled until a plan is selected; price + label update with selection.
+  - Cart + checkout: cart line shows plan badge + duration; checkout submission sends `planId` in items.
+  - Admin product form: "subscription" added to type select (locked after creation, like other types); when editing a subscription product, a new "خطط الاشتراك" tab exposes inline `<SubscriptionPlans>` component for add/toggle-active/delete plans.
+  - My-orders page (`/my-orders`): new "اشتراكاتي" section above orders, fetched from `/api/my-subscriptions`, renders each subscription as a card with status badge (active/expired), progress bar (elapsed/total days), remaining days, expiry date.
