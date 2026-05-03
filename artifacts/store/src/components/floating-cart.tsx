@@ -1,12 +1,15 @@
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { ShoppingCart } from "lucide-react";
 import { useCart } from "@/hooks/use-cart";
 
 export function FloatingCart() {
   const { items } = useCart();
+  const [location] = useLocation();
   const count = items.reduce((sum, it) => sum + it.quantity, 0);
   const total = items.reduce((sum, it) => sum + (it.product.price * it.quantity), 0);
   if (count === 0) return null;
+  // Hide the floating cart on cart/checkout pages — the customer is already there
+  if (location === "/cart" || location.startsWith("/checkout")) return null;
 
   return (
     <Link href="/cart">
