@@ -387,6 +387,112 @@ export default function ProductForm() {
     );
   };
 
+  function ProductOptions({ productId }: { productId: number }) {
+    type Opt = { id: number; name: string; price: number; sortOrder: number; active: boolean };
+    const [opts, setOpts] = useState<Opt[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [optName, setOptName] = useState("");
+    const [optPrice, setOptPrice] = useState<number | "">("");
+    const [adding, setAdding] = useState(false);
+
+    const authHeaders = (extra: Record<string, string> = {}): Record<string, string> => {
+      const token = localStorage.getItem("token");
+      return { ...extra, ...(token ? { Authorization: `Bearer ${token}` } : {}) };
+    };
+
+    const reload = async () => {
+      setLoading(true);
+      try {
+        const r = await fetch(`/api/admin/products/${productId}/options`, { headers: authHeaders() });
+        if (r.ok) setOpts(await r.json());
+      } finally { setLoading(false); }
+    };
+    useEffect(() => { reload(); }, [productId]);
+
+    const addOpt = async () => {
+      if (!optName.trim() || optPrice === "" || Number(optPrice) < 0) {
+        toast({ variant: "destructive", title: "تعبئة الاسم والسعر مطلوبة" });
+        return;
+      }
+      setAdding(true);
+      try {
+        const r = await fetch(`/api/admin/products/${productId}/options`, {
+          method: "POST",
+          headers: authHeaders({ "Content-Type": "application/json" }),
+          body: JSON.stringify({ name: optName.trim(), price: Number(optPrice) }),
+        });
+        if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || "فشل الإضافة");
+        setOptName(""); setOptPrice("");
+        toast({ title: "تمت إضافة الخيار" });
+        reload();
+      } catch (e) {
+        toast({ variant: "destructive", title: "خطأ", description: (e as Error).message });
+      } finally { setAdding(false); }
+    };
+
+    const toggleOpt = async (o: Opt) => {
+      await fetch(`/api/admin/product-options/${o.id}`, {
+        method: "PATCH",
+        headers: authHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ active: !o.active }),
+      });
+      reload();
+    };
+
+    const removeOpt = async (o: Opt) => {
+      if (!confirm(`حذف الخيار "${o.name}"؟`)) return;
+      await fetch(`/api/admin/product-options/${o.id}`, { method: "DELETE", headers: authHeaders() });
+      reload();
+    };
+
+    return (
+      <div className="space-y-6">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3 p-4 border rounded-lg bg-muted/30">
+          <div className="md:col-span-2">
+            <FormLabel>اسم الخيار</FormLabel>
+            <Input value={optName} onChange={(e) => setOptName(e.target.value)} placeholder="مثال: 100 إعادة تغريد، حجم S، لون أحمر" />
+          </div>
+          <div>
+            <FormLabel>السعر (ر.س)</FormLabel>
+            <Input type="number" min={0} step="0.01" value={optPrice} onChange={(e) => setOptPrice(e.target.value === "" ? "" : Number(e.target.value))} />
+          </div>
+          <div className="md:col-span-1 flex items-end">
+            <Button type="button" onClick={addOpt} disabled={adding} className="w-full">
+              <Plus className="w-4 h-4 ml-2" /> {adding ? "..." : "إضافة"}
+            </Button>
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="h-24 bg-muted/30 animate-pulse rounded-lg" />
+        ) : opts.length === 0 ? (
+          <div className="text-center text-muted-foreground py-8 border rounded-lg border-dashed">
+            لا توجد خيارات بعد. أضف خيارات ليختار العميل واحداً عند الشراء.
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {opts.map((o) => (
+              <div key={o.id} className={`flex items-center gap-4 p-4 rounded-lg border ${o.active ? "" : "opacity-60 bg-muted/20"}`}>
+                <div className="flex-1 min-w-0">
+                  <div className="font-bold truncate">{o.name}</div>
+                </div>
+                <div className="font-bold text-primary text-lg">{o.price.toLocaleString("ar-SA")} ر.س</div>
+                <div className="flex items-center gap-2">
+                  <Switch checked={o.active} onCheckedChange={() => toggleOpt(o)} />
+                  <Button variant="ghost" size="icon" type="button"
+                    className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                    onClick={() => removeOpt(o)}>
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   function SubscriptionPlans({ productId }: { productId: number }) {
     type Plan = { id: number; name: string; durationDays: number; price: number; sortOrder: number; active: boolean };
     const [plans, setPlans] = useState<Plan[]>([]);
@@ -526,6 +632,7 @@ export default function ProductForm() {
           {isEditing && watchType === "digital" && <TabsTrigger value="codes"><Key className="w-4 h-4 mr-2" /> الأكواد الرقمية</TabsTrigger>}
           {isEditing && watchType === "booking" && <TabsTrigger value="slots"><Calendar className="w-4 h-4 mr-2" /> المواعيد المتاحة</TabsTrigger>}
           {isEditing && watchType === "subscription" && <TabsTrigger value="plans"><Repeat className="w-4 h-4 mr-2" /> خطط الاشتراك</TabsTrigger>}
+          {isEditing && watchType !== "subscription" && <TabsTrigger value="options">الخيارات</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="general">
@@ -887,6 +994,20 @@ export default function ProductForm() {
               </CardHeader>
               <CardContent>
                 <BookingSlots />
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
+
+        {isEditing && watchType !== "subscription" && (
+          <TabsContent value="options">
+            <Card>
+              <CardHeader>
+                <CardTitle>خيارات المنتج</CardTitle>
+                <CardDescription>أضف خيارات يختار العميل واحداً منها عند الشراء (مثل: 100 إعادة تغريد بسعر 19 ر.س، 500 إعادة تغريد بسعر 49 ر.س). سعر الخيار يحلّ محلّ سعر المنتج الأساسي.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ProductOptions productId={productId} />
               </CardContent>
             </Card>
           </TabsContent>

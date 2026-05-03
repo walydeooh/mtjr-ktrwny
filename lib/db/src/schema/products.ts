@@ -79,6 +79,20 @@ export const customerSubscriptionsTable = pgTable("customer_subscriptions", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+// Generic per-product options (Salla-style "خيارات اختيار واحد"):
+// each option has a label and an absolute price. If a product has at least one
+// active option, the customer MUST pick exactly one at purchase, and the option
+// price replaces the base product price.
+export const productOptionsTable = pgTable("product_options", {
+  id: serial("id").primaryKey(),
+  productId: integer("product_id").notNull().references(() => productsTable.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  price: numeric("price", { precision: 10, scale: 2 }).notNull(),
+  sortOrder: integer("sort_order").notNull().default(0),
+  active: boolean("active").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const insertProductSchema = createInsertSchema(productsTable).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertDigitalCodeSchema = createInsertSchema(digitalCodesTable).omit({ id: true, createdAt: true });
 export const insertTimeSlotSchema = createInsertSchema(timeSlotsTable).omit({ id: true, createdAt: true });
@@ -90,3 +104,4 @@ export type DigitalCode = typeof digitalCodesTable.$inferSelect;
 export type TimeSlot = typeof timeSlotsTable.$inferSelect;
 export type SubscriptionPlan = typeof subscriptionPlansTable.$inferSelect;
 export type CustomerSubscription = typeof customerSubscriptionsTable.$inferSelect;
+export type ProductOption = typeof productOptionsTable.$inferSelect;

@@ -177,3 +177,14 @@ The token getter in `main.tsx` switches based on `window.location.pathname`.
   - Cart + checkout: cart line shows plan badge + duration; checkout submission sends `planId` in items.
   - Admin product form: "subscription" added to type select (locked after creation, like other types); when editing a subscription product, a new "خطط الاشتراك" tab exposes inline `<SubscriptionPlans>` component for add/toggle-active/delete plans.
   - My-orders page (`/my-orders`): new "اشتراكاتي" section above orders, fetched from `/api/my-subscriptions`, renders each subscription as a card with status badge (active/expired), progress bar (elapsed/total days), remaining days, expiry date.
+- **Generic product options (Salla-style)**: ANY non-subscription product can have multiple selectable options; each option has a name and absolute price.
+  - Schema: `product_options` (productId FK CASCADE, name, price, sortOrder, active). Schema in `lib/db/src/schema/products.ts`.
+  - Routes (`artifacts/api-server/src/routes/product-options.ts`):
+    - Public: `GET /api/products/:id/options` (active only, sorted by sortOrder then id).
+    - Admin: `GET/POST /api/admin/products/:id/options`, `PATCH/DELETE /api/admin/product-options/:optionId`.
+  - Order flow (`orders.ts`): for non-subscription products, if there is at least one ACTIVE option, the order item MUST include `optionId`; rejects with 400 otherwise. The selected option's price replaces the base product price as `unitPrice`. Snapshot stored on order item as `{option: {optionId, optionName}}`.
+  - **api-zod**: `CreateOrderBody.items` schema extended with `optionId: z.number().optional()`.
+  - Cart hook: `CartItem` carries `optionId/optionName/optionPrice`; cart-line key now `productId:planId:optionId` (so two options of same product = two lines); `total` uses `optionPrice ?? planPrice ?? product.price`; `removeItem`/`updateQuantity` accept optional `optionId`.
+  - Storefront product page: when product has options, shows a REQUIRED options grid (radio cards, similar style to plan picker); add-to-cart disabled until selected; price label updates with selection.
+  - Cart + checkout: cart line shows option badge; checkout sends `optionId` per item.
+  - Admin product form: new "الخيارات" tab visible for ALL non-subscription products in edit mode, with inline `<ProductOptions>` component (add/toggle-active/delete). Subscription products use the existing "خطط الاشتراك" tab instead — the two systems don't overlap.

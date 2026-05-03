@@ -334,6 +334,7 @@ export const CreateOrderBody = zod.object({
       productId: zod.number(),
       quantity: zod.number(),
       planId: zod.number().optional(),
+      optionId: zod.number().optional(),
     }),
   ),
   notes: zod.string().nullish(),

@@ -104,6 +104,7 @@ export default function Checkout() {
             productId: item.product.id,
             quantity: item.quantity,
             ...(item.planId ? { planId: item.planId } : {}),
+            ...(item.optionId ? { optionId: item.optionId } : {}),
           })),
           source: "web",
           couponCode: coupon?.code,
@@ -262,7 +263,7 @@ export default function Checkout() {
                       <h4 className="font-medium text-sm line-clamp-2">{item.product.name}</h4>
                       <p className="text-muted-foreground text-xs mt-1">الكمية: {item.quantity}</p>
                     </div>
-                    <div className="font-bold text-sm">{(item.product.price * item.quantity).toLocaleString("ar-SA")} ر.س</div>
+                    <div className="font-bold text-sm">{((item.optionPrice ?? item.planPrice ?? item.product.price) * item.quantity).toLocaleString("ar-SA")} ر.س</div>
                   </div>
                 ))}
               </div>

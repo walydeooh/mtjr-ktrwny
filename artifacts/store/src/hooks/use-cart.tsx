@@ -12,13 +12,17 @@ export interface CartItem {
   planName?: string;
   planPrice?: number;
   planDurationDays?: number;
+  // Generic product option (Salla-style): chosen variant
+  optionId?: number;
+  optionName?: string;
+  optionPrice?: number;
 }
 
 interface CartContextType {
   items: CartItem[];
   addItem: (item: CartItem) => void;
-  removeItem: (productId: number, planId?: number) => void;
-  updateQuantity: (productId: number, quantity: number, planId?: number) => void;
+  removeItem: (productId: number, planId?: number, optionId?: number) => void;
+  updateQuantity: (productId: number, quantity: number, planId?: number, optionId?: number) => void;
   clearCart: () => void;
   total: number;
 }
@@ -42,7 +46,10 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const addItem = (newItem: CartItem) => {
     setItems((current) => {
       const existing = current.find(
-        (item) => item.product.id === newItem.product.id && item.slotId === newItem.slotId && item.planId === newItem.planId
+        (item) => item.product.id === newItem.product.id
+          && item.slotId === newItem.slotId
+          && item.planId === newItem.planId
+          && item.optionId === newItem.optionId
       );
       if (existing) {
         return current.map((item) =>
@@ -55,21 +62,26 @@ export function CartProvider({ children }: { children: ReactNode }) {
     });
   };
 
-  // Cart-line key (productId + planId) — subscription items with different plans coexist.
-  const lineKey = (productId: number, planId?: number) => `${productId}:${planId ?? "none"}`;
+  // Cart-line key — items differing by chosen plan or option are distinct lines.
+  const lineKey = (productId: number, planId?: number, optionId?: number) =>
+    `${productId}:${planId ?? "np"}:${optionId ?? "no"}`;
 
-  const removeItem = (productId: number, planId?: number) => {
-    setItems((current) => current.filter((item) => lineKey(item.product.id, item.planId) !== lineKey(productId, planId)));
+  const removeItem = (productId: number, planId?: number, optionId?: number) => {
+    setItems((current) => current.filter(
+      (item) => lineKey(item.product.id, item.planId, item.optionId) !== lineKey(productId, planId, optionId)
+    ));
   };
 
-  const updateQuantity = (productId: number, quantity: number, planId?: number) => {
+  const updateQuantity = (productId: number, quantity: number, planId?: number, optionId?: number) => {
     if (quantity <= 0) {
-      removeItem(productId, planId);
+      removeItem(productId, planId, optionId);
       return;
     }
     setItems((current) =>
       current.map((item) =>
-        lineKey(item.product.id, item.planId) === lineKey(productId, planId) ? { ...item, quantity } : item
+        lineKey(item.product.id, item.planId, item.optionId) === lineKey(productId, planId, optionId)
+          ? { ...item, quantity }
+          : item
       )
     );
   };
@@ -77,7 +89,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const clearCart = () => setItems([]);
 
   const total = items.reduce(
-    (sum, item) => sum + (item.planPrice ?? item.product.price) * item.quantity,
+    (sum, item) => sum + (item.optionPrice ?? item.planPrice ?? item.product.price) * item.quantity,
     0
   );
 

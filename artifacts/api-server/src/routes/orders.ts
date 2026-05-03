@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, ordersTable, customersTable, productsTable, digitalCodesTable, couponsTable, affiliatesTable, storeSettingsTable, subscriptionPlansTable, customerSubscriptionsTable } from "@workspace/db";
+import { db, ordersTable, customersTable, productsTable, digitalCodesTable, couponsTable, affiliatesTable, storeSettingsTable, subscriptionPlansTable, customerSubscriptionsTable, productOptionsTable } from "@workspace/db";
 import { computeCouponDiscount } from "./coupons";
 import { eq, and } from "drizzle-orm";
 import {
@@ -84,6 +84,29 @@ router.post("/orders", async (req, res): Promise<void> => {
       unitPrice = parseFloat(plan.price as unknown as string);
       planSnapshot = { planId: plan.id, planName: plan.name, durationDays: plan.durationDays };
     }
+    // Generic product options: if the product has ANY active option, customer MUST
+    // select one. Selected option's price replaces the base product price.
+    let optionSnapshot: { optionId: number; optionName: string } | null = null;
+    if (product.type !== "subscription") {
+      const activeOptions = await db.select().from(productOptionsTable).where(
+        and(eq(productOptionsTable.productId, product.id), eq(productOptionsTable.active, true))
+      );
+      if (activeOptions.length > 0) {
+        const optIdRaw = (item as { optionId?: number | string }).optionId;
+        const optionId = typeof optIdRaw === "number" ? optIdRaw : parseInt(String(optIdRaw || ""), 10);
+        if (!optionId || isNaN(optionId)) {
+          res.status(400).json({ error: `يجب اختيار أحد الخيارات للمنتج "${product.name}"` });
+          return;
+        }
+        const option = activeOptions.find(o => o.id === optionId);
+        if (!option) {
+          res.status(400).json({ error: `الخيار المحدد غير متاح للمنتج "${product.name}"` });
+          return;
+        }
+        unitPrice = parseFloat(option.price as unknown as string);
+        optionSnapshot = { optionId: option.id, optionName: option.name };
+      }
+    }
     const totalPrice = unitPrice * item.quantity;
     subtotal += totalPrice;
     orderItems.push({
@@ -94,6 +117,7 @@ router.post("/orders", async (req, res): Promise<void> => {
       unitPrice,
       totalPrice,
       ...(planSnapshot ? { plan: planSnapshot } : {}),
+      ...(optionSnapshot ? { option: optionSnapshot } : {}),
     });
   }
 

@@ -3,12 +3,13 @@ import { useParams, useLocation } from "wouter";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ShoppingCart, Package, ArrowRight, Calendar, Check, Sparkles } from "lucide-react";
+import { ShoppingCart, Package, ArrowRight, Calendar, Check, Sparkles, ListChecks } from "lucide-react";
 import { useCart } from "@/hooks/use-cart";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
 
 type Plan = { id: number; name: string; durationDays: number; price: number };
+type Option = { id: number; name: string; price: number };
 
 export default function ProductDetail() {
   const { id } = useParams();
@@ -18,6 +19,8 @@ export default function ProductDetail() {
   const { toast } = useToast();
   const [plans, setPlans] = useState<Plan[]>([]);
   const [selectedPlanId, setSelectedPlanId] = useState<number | null>(null);
+  const [options, setOptions] = useState<Option[]>([]);
+  const [selectedOptionId, setSelectedOptionId] = useState<number | null>(null);
 
   const { data: product, isLoading, isError } = useGetProduct(productId, {
     query: { enabled: !!productId, queryKey: getGetProductQueryKey(productId) },
@@ -30,6 +33,19 @@ export default function ProductDetail() {
         .then((p: Plan[]) => {
           setPlans(p);
           if (p.length > 0 && selectedPlanId === null) setSelectedPlanId(p[0].id);
+        })
+        .catch(() => {});
+    }
+  }, [product?.type, productId]);
+
+  // Generic options exist for ALL non-subscription products (subscription uses plans instead)
+  useEffect(() => {
+    if (product && product.type !== "subscription") {
+      fetch(`/api/products/${productId}/options`)
+        .then(r => r.json())
+        .then((o: Option[]) => {
+          setOptions(Array.isArray(o) ? o : []);
+          if (Array.isArray(o) && o.length > 0 && selectedOptionId === null) setSelectedOptionId(o[0].id);
         })
         .catch(() => {});
     }
@@ -60,7 +76,11 @@ export default function ProductDetail() {
 
   const isSubscription = product.type === "subscription";
   const selectedPlan = plans.find(p => p.id === selectedPlanId) || null;
-  const displayPrice = isSubscription && selectedPlan ? selectedPlan.price : product.price;
+  const selectedOption = options.find(o => o.id === selectedOptionId) || null;
+  const hasOptions = !isSubscription && options.length > 0;
+  const displayPrice = isSubscription && selectedPlan
+    ? selectedPlan.price
+    : (hasOptions && selectedOption ? selectedOption.price : product.price);
 
   const handleAddToCart = () => {
     if (isSubscription) {
@@ -76,10 +96,22 @@ export default function ProductDetail() {
         planPrice: selectedPlan.price,
         planDurationDays: selectedPlan.durationDays,
       });
-      toast({
-        title: "تمت الإضافة للسلة",
-        description: `${product.name} — ${selectedPlan.name}`,
+      toast({ title: "تمت الإضافة للسلة", description: `${product.name} — ${selectedPlan.name}` });
+      return;
+    }
+    if (hasOptions) {
+      if (!selectedOption) {
+        toast({ variant: "destructive", title: "يجب اختيار أحد الخيارات" });
+        return;
+      }
+      addItem({
+        product,
+        quantity: 1,
+        optionId: selectedOption.id,
+        optionName: selectedOption.name,
+        optionPrice: selectedOption.price,
       });
+      toast({ title: "تمت الإضافة للسلة", description: `${product.name} — ${selectedOption.name}` });
       return;
     }
     if (product.type === "booking") {
@@ -135,6 +167,42 @@ export default function ProductDetail() {
               {product.description || "لا يوجد وصف لهذا المنتج."}
             </p>
           </div>
+
+          {/* Generic product options picker — REQUIRED when present */}
+          {hasOptions && (
+            <div className="mb-6 space-y-3">
+              <label className="text-base font-bold flex items-center gap-2">
+                <ListChecks className="w-4 h-4 text-primary" />
+                اختر أحد الخيارات
+                <span className="text-destructive">*</span>
+              </label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {options.map(o => {
+                  const active = selectedOptionId === o.id;
+                  return (
+                    <button
+                      key={o.id}
+                      type="button"
+                      onClick={() => setSelectedOptionId(o.id)}
+                      className={`relative text-right p-4 rounded-xl border-2 transition-all ${
+                        active ? "border-primary bg-primary/5 shadow-sm" : "border-border hover:border-primary/50"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="font-bold min-w-0 flex-1">{o.name}</div>
+                        <div className="font-bold text-primary shrink-0">{o.price.toLocaleString("ar-SA")} ر.س</div>
+                      </div>
+                      {active && (
+                        <div className="absolute top-2 left-2 w-5 h-5 rounded-full bg-primary text-primary-foreground flex items-center justify-center">
+                          <Check className="w-3 h-3" />
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Subscription plan picker — REQUIRED */}
           {isSubscription && (
@@ -198,7 +266,8 @@ export default function ProductDetail() {
               onClick={handleAddToCart}
               disabled={
                 (product.type === "physical" && product.stock === 0) ||
-                (isSubscription && (plans.length === 0 || !selectedPlanId))
+                (isSubscription && (plans.length === 0 || !selectedPlanId)) ||
+                (hasOptions && !selectedOptionId)
               }
             >
               <ShoppingCart className="w-5 h-5 ml-2" />

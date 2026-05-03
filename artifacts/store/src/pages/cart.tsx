@@ -30,13 +30,13 @@ export default function Cart() {
       <div className="grid lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 space-y-4">
           {items.map((item) => {
-            const unitPrice = item.planPrice ?? item.product.price;
+            const unitPrice = item.optionPrice ?? item.planPrice ?? item.product.price;
             const typeLabel =
               item.product.type === "digital" ? "منتج رقمي" :
               item.product.type === "physical" ? "منتج مادي" :
               item.product.type === "subscription" ? "اشتراك" : "خدمة حجز";
             return (
-            <Card key={`${item.product.id}-${item.slotId || 'none'}-${item.planId || 'none'}`}>
+            <Card key={`${item.product.id}-${item.slotId || 'none'}-${item.planId || 'none'}-${item.optionId || 'none'}`}>
               <CardContent className="p-4 sm:p-6 flex gap-4 sm:gap-6">
                 <div className="w-24 h-24 rounded-lg bg-muted flex-shrink-0 border overflow-hidden">
                   {item.product.imageUrl && (
@@ -54,6 +54,11 @@ export default function Cart() {
                           الخطة: {item.planName} ({item.planDurationDays} يوم)
                         </p>
                       )}
+                      {item.optionName && (
+                        <p className="text-primary text-sm mt-1 font-medium bg-primary/10 inline-block px-2 py-0.5 rounded">
+                          الخيار: {item.optionName}
+                        </p>
+                      )}
                       {item.date && item.startTime && (
                         <p className="text-primary text-sm mt-1 font-medium bg-primary/10 inline-block px-2 py-0.5 rounded">
                           {item.date} | {item.startTime}
@@ -68,19 +73,19 @@ export default function Cart() {
                   <div className="flex items-center justify-between mt-auto pt-4">
                     <div className="flex items-center border rounded-md">
                       <Button variant="ghost" size="icon" className="h-8 w-8 rounded-none rounded-r-md"
-                        onClick={() => updateQuantity(item.product.id, item.quantity - 1, item.planId)}>
+                        onClick={() => updateQuantity(item.product.id, item.quantity - 1, item.planId, item.optionId)}>
                         <Minus className="h-3 w-3" />
                       </Button>
                       <span className="w-10 text-center text-sm font-medium">{item.quantity}</span>
                       <Button variant="ghost" size="icon" className="h-8 w-8 rounded-none rounded-l-md"
-                        onClick={() => updateQuantity(item.product.id, item.quantity + 1, item.planId)}>
+                        onClick={() => updateQuantity(item.product.id, item.quantity + 1, item.planId, item.optionId)}>
                         <Plus className="h-3 w-3" />
                       </Button>
                     </div>
 
                     <Button variant="ghost" size="sm"
                       className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                      onClick={() => removeItem(item.product.id, item.planId)}>
+                      onClick={() => removeItem(item.product.id, item.planId, item.optionId)}>
                       <Trash2 className="h-4 w-4 ml-2" />
                       حذف
                     </Button>
