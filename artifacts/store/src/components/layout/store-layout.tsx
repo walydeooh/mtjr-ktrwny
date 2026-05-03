@@ -158,9 +158,8 @@ export function StoreLayout({ children }: { children: ReactNode }) {
       </header>
       <main className="flex-1 container mx-auto px-4 py-8">{children}</main>
       {info?.floatingCartEnabled !== false && <FloatingCart />}
-
       <footer className="bg-white border-t mt-12">
-        <div className="container mx-auto px-4 py-10 grid md:grid-cols-3 gap-8">
+        <div className="container mx-auto px-4 py-10 grid md:grid-cols-3 gap-8 text-[#000000]">
           <div>
             <div className="flex items-center gap-2 font-bold text-xl text-primary mb-3">
               {info?.storeLogoUrl ? <img src={info.storeLogoUrl} alt={storeName} className="h-8 w-8 object-contain" /> : <Store className="h-6 w-6" />}
