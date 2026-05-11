@@ -1,6 +1,3 @@
-[build]
-builder = "NIXPACKS"
-
 [deploy]
 healthcheckPath = "/api/healthz"
 healthcheckTimeout = 60
